@@ -72,7 +72,20 @@ namespace COPPlatform.Controllers
         [Route("saveAssessment")]
         public async Task<IActionResult> SaveAssessment([FromBody] AddAssessmentDto response)
         {
-            var result = await _responseService.SaveAssessment(response);
+            var userId = GetUserIdFromClaims();
+            if (userId == null)
+                return Unauthorized("User ID not found in token.");
+
+            var role = GetRoleFromClaims();
+            if (role == null)
+                return Unauthorized("You Don't have access.");
+
+            if (!Enum.TryParse<UserRole>(role, true, out var userRole))
+            {
+                return Unauthorized("You Don't have access.");
+            }
+
+            var result = await _responseService.SaveAssessment(response, userId.GetValueOrDefault(), userRole);
             return Ok(result);
         }
 
@@ -114,7 +127,21 @@ namespace COPPlatform.Controllers
             if (file == null || file.Length == 0)
                 return BadRequest("No file uploaded.");
 
-            var content = await _responseService.ImportAssessmentAsync(file, userID);
+            var userId = GetUserIdFromClaims();
+            if (userId == null)
+                return Unauthorized("User ID not found in token.");
+
+            var role = GetRoleFromClaims();
+            if (role == null)
+                return Unauthorized("You Don't have access.");
+
+            if (!Enum.TryParse<UserRole>(role, true, out var userRole))
+            {
+                return Unauthorized("You Don't have access.");
+            }
+
+
+            var content = await _responseService.ImportAssessmentAsync(file, userId.GetValueOrDefault(), userRole);
             return Ok(content);
         }
         /// <summary>
@@ -147,7 +174,20 @@ namespace COPPlatform.Controllers
         [Authorize]
         public async Task<IActionResult> getAssessmentProgressHistory(int assessmentID)
         {
-            var result = await _responseService.GetAssessmentProgressHistory(assessmentID);
+            var userId = GetUserIdFromClaims();
+            if (userId == null)
+                return Unauthorized("User ID not found in token.");
+
+            var role = GetRoleFromClaims();
+            if (role == null)
+                return Unauthorized("You Don't have access.");
+
+            if (!Enum.TryParse<UserRole>(role, true, out var userRole))
+            {
+                return Unauthorized("You Don't have access.");
+            }
+
+            var result = await _responseService.GetAssessmentProgressHistory(assessmentID, userId.GetValueOrDefault(), userRole);
             return Ok(result);
         }
 

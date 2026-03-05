@@ -103,7 +103,7 @@ namespace COPPlatform.Services
             }
 
         }
-        public async Task<ResultResponseDto<string>> SaveAssessment(AddAssessmentDto request)
+        public async Task<ResultResponseDto<string>> SaveAssessment(AddAssessmentDto request, int userID, UserRole userRole)
         {
             try
             {
@@ -113,9 +113,8 @@ namespace COPPlatform.Services
                     .Include(x => x.PillarAssessments)
                     .ThenInclude(x => x.Responses)
                     .FirstOrDefaultAsync(x =>
-                        x.IsActive && x.UpdatedAt.Year == now.Year &&
-                        (x.AssessmentID == request.AssessmentID ||
-                         x.UserAssessmentMappingID == request.UserAssessmentMappingID));
+                        x.IsActive  &&
+                        (x.AssessmentID == request.AssessmentID || x.UserAssessmentMappingID == request.UserAssessmentMappingID));
 
                 // If no assessment found, create a new one
                 if (assessment == null)
@@ -124,7 +123,7 @@ namespace COPPlatform.Services
                         .FirstOrDefaultAsync(x => x.UserAssessmentMappingID == request.UserAssessmentMappingID);
 
                     if (ucm == null)
-                        return ResultResponseDto<string>.Failure(new[] { "City is not assigned" });
+                        return ResultResponseDto<string>.Failure(new[] { "invitation is not assigned" });
 
                     assessment = new Assessment
                     {
@@ -212,7 +211,7 @@ namespace COPPlatform.Services
 
                 await _context.SaveChangesAsync();
 
-                _download.InsertAnalyticalLayerResults(assessment.UserAssessmentMapping.Year);
+                //_download.InsertAnalyticalLayerResults(assessment.UserAssessmentMapping.Year);
 
                 return ResultResponseDto<string>.Success("", new[] { "Pillar saved successfully" }, 1);
             }
@@ -380,7 +379,7 @@ namespace COPPlatform.Services
                 };
             }
         }
-        public async Task<ResultResponseDto<string>> ImportAssessmentAsync(IFormFile file, int userID)
+        public async Task<ResultResponseDto<string>> ImportAssessmentAsync(IFormFile file, int userID, UserRole userRole)
         {
             try
             {
@@ -402,8 +401,14 @@ namespace COPPlatform.Services
 
                             int lastRow = ws.LastRowUsed().RowNumber();
 
+                            // Validate city-user mapping
+                            if (!_context.UserAssessmentMappings.Any(x => !x.IsDeleted && x.UserID == userID && x.UserAssessmentMappingID == UserAssessmentMappingID))
+                            {
+                                return ResultResponseDto<string>.Failure(new[] { "Invalid file uploaded" });
+                            }
+
                             // Start from first question block (approx row 8)
-                            for (int row = 8; row <= lastRow; row += 4)
+                            for (int row = 8; row <= lastRow; row += 3)
                             {
                                 int questionID = ws.Cell(row+2, 12).GetValue<int?>() ?? 0;
                                 int questionOptionID = ws.Cell(row + 2, 13).GetValue<int?>() ?? 0;
@@ -412,17 +417,12 @@ namespace COPPlatform.Services
                                 if (questionID == 0)
                                     continue;
 
-                                // Validate city-user mapping
-                                if (!_context.UserAssessmentMappings.Any(x => !x.IsDeleted && x.UserID == userID && x.UserAssessmentMappingID == UserAssessmentMappingID))
-                                {
-                                    return ResultResponseDto<string>.Failure(new[] { "Invalid file uploaded" });
-                                }
 
                                 // ===== Read from Sheet =====
                                 string scoreText = ws.Cell(row, 4).GetString().Trim();          // Row 1 - Score
-                                string naText = ws.Cell(row + 1, 4).GetString().Trim();          // Row 2 - N/A or Unknown
-                                string comment = ws.Cell(row + 2, 4).GetString().Trim();         // Row 3 - Comment
-                                string source = ws.Cell(row + 3, 4).GetString().Trim();          // Row 4 - Source (optional)
+                                //string naText = ws.Cell(row + 1, 4).GetString().Trim();          // Row 2 - N/A or Unknown
+                                string comment = ws.Cell(row + 1, 4).GetString().Trim();         // Row 3 - Comment
+                                string source = ws.Cell(row + 2, 4).GetString().Trim();          // Row 4 - Source (optional)
 
                                 int? score = null;
                                 var options = optionList.Where(x => x.QuestionID == questionID).ToList();
@@ -436,12 +436,7 @@ namespace COPPlatform.Services
                                         questionOptionID = options.FirstOrDefault(x => x.ScoreValue == score)?.OptionID ?? 0;
                                     }
                                 }
-                                else if (!string.IsNullOrWhiteSpace(naText))
-                                {
-                                    // Check N/A or Unknown option
-                                    questionOptionID = options
-                                        .FirstOrDefault(x => naText.Equals(x.OptionText, StringComparison.OrdinalIgnoreCase))?.OptionID ?? 0;
-                                }
+                                
 
                                 // Only save if a valid option was selected
                                 if (questionOptionID > 0)
@@ -469,7 +464,7 @@ namespace COPPlatform.Services
                                 Responses = assessmentResponses
                             };
 
-                            var response = await SaveAssessment(assessment);
+                            var response = await SaveAssessment(assessment,userID,userRole);
                             if (!response.Succeeded)
                                 return response;
 
@@ -625,7 +620,7 @@ namespace COPPlatform.Services
             }
         }
 
-        public async Task<ResultResponseDto<GetAssessmentHistoryDto>> GetAssessmentProgressHistory(int assessmentID)
+        public async Task<ResultResponseDto<GetAssessmentHistoryDto>> GetAssessmentProgressHistory(int assessmentID, int userID, UserRole userRole)
         {
             try
             {
@@ -640,8 +635,14 @@ namespace COPPlatform.Services
                     return ResultResponseDto<GetAssessmentHistoryDto>.Failure(new[] { "Failed to get assessment history" });
                 }
 
+
+                var accessPillars = await _context.UserPillarMappings
+                    .Where(x => x.UserAssessmentMappingID == assessment.UserAssessmentMappingID && x.UserID == userID && !x.IsDeleted && x.IsActive)
+                    .Select(x => x.PillarID)
+                    .ToListAsync();
+
                 // Get total questions directly (avoid Include if not needed)
-                var totalQuestions = await _context.Questions.CountAsync();
+                var totalQuestions = await _context.Questions.Where(x=> accessPillars.Contains(x.PillarID)).CountAsync();
 
                 // Calculate answered questions
                 var totalAnsweredQuestions = assessment.PillarAssessments
@@ -660,6 +661,7 @@ namespace COPPlatform.Services
                     AssessmentID = assessmentID,
                     Score = score,
                     TotalAnsPillar = assessment.PillarAssessments.Count,
+                    TotalPillar = accessPillars.Count,
                     TotalAnsQuestion = totalAnsweredQuestions,
                     TotalQuestion = totalQuestions,
                     CurrentProgress = totalQuestions > 0
@@ -986,7 +988,8 @@ namespace COPPlatform.Services
                                  PillarID = x.upm.PillarID,
                                  PillarName = x.upm.Pillar.PillarName,
                                  Description = x.upm.Pillar.Description,
-                                 DisplayOrder = x.upm.Pillar.DisplayOrder
+                                 DisplayOrder = x.upm.Pillar.DisplayOrder,
+                                 ImagePath = x.upm.Pillar.ImagePath
                              })
                              .OrderBy(p => p.DisplayOrder)
                              .ToList()

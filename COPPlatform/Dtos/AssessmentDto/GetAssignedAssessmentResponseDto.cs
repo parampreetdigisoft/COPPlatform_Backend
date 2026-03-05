@@ -23,5 +23,6 @@ namespace COPPlatform.Dtos.AssessmentDto
         public string PillarName { get; set; }
         public string Description { get; set; }
         public int DisplayOrder { get; set; }
+        public string ImagePath { get; set; }
     }
 }

@@ -250,20 +250,6 @@ namespace COPPlatform.Services
                         question.QuestionOptions.Add(option);
                     }
 
-                    // Add default options (N/A & Unknown)
-                    question.QuestionOptions.Add(new QuestionOption
-                    {
-                        DisplayOrder = 6,
-                        OptionText = "N/A",
-                        ScoreValue = null
-                    });
-                    question.QuestionOptions.Add(new QuestionOption
-                    {
-                        DisplayOrder = 7,
-                        OptionText = "Unknown",
-                        ScoreValue = null
-                    });
-
                     newQuestions.Add(question);
                 }
 
@@ -286,8 +272,8 @@ namespace COPPlatform.Services
         {
             try
             {
-                var valid = _context.UserAssessmentMappings.Any(x => x.UserAssessmentMappingID == request.UserAssessmentMappingID && x.UserID == userId && !x.IsDeleted);
-                if (valid)
+                var pillarMappings = await _context.UserPillarMappings.Where(x => x.UserAssessmentMappingID == request.UserAssessmentMappingID && x.UserID == userId && !x.IsDeleted).ToListAsync();
+                if (pillarMappings.Count > 0)
                 {
                     var year = DateTime.Now.Year;
                     // Load assessment once (if exists)
@@ -302,15 +288,18 @@ namespace COPPlatform.Services
                        .Select(r => r.PillarID)
                        .ToList();
                     }
-                    if (assessment != null && answeredPillarIds.Count == 14 && !request.PillarID.HasValue)
+                    if (assessment != null && answeredPillarIds.Count == pillarMappings.Count && !request.PillarID.HasValue)
                     {
                         request.PillarID = assessment.PillarAssessments.First().PillarID;
                     }
+
+
 
                     // Get next unanswered pillar
                     var selectPillar = await _context.Pillars
                         .Include(p => p.Questions)
                             .ThenInclude(q => q.QuestionOptions)
+                        .Where(p => pillarMappings.Select(x => x.PillarID).Contains(p.PillarID))
                         .Where(p => !request.PillarID.HasValue ? !answeredPillarIds.Contains(p.PillarID) : p.PillarID == request.PillarID)
                         .OrderBy(p => p.DisplayOrder)
                         .FirstOrDefaultAsync();
@@ -384,29 +373,38 @@ namespace COPPlatform.Services
                 return ResultResponseDto<GetPillarQuestionByCityRespones>.Failure(new string[] { "There is an error please try later" });
             }
         }
-        public async Task<Tuple<string, byte[]>> ExportAssessment(int UserAssessmentMappingID)
+        public async Task<Tuple<string, byte[]>> ExportAssessment(int UserAssessmentMappingID, int userId, UserRole userRole)
         {
             try
             {
 
                 var fileName = (from m in _context.UserAssessmentMappings
-                                join c in _context.Cities on m.CityID equals c.CityID
-                                join u in _context.Users on m.UserID equals u.UserID 
+                                join u in _context.Users on m.AssignedByUserId equals u.UserID 
                                 where m.UserAssessmentMappingID == UserAssessmentMappingID
                                 select new
                                 {
-                                    CityName = c.CityName,
+                                    Year = m.Year,
+                                    DueDate = m.DueDate,
                                     FullName = u.FullName
                                 }).FirstOrDefault();
 
-                var sheetName = fileName?.CityName + "_" + fileName?.FullName;
+                var sheetName = fileName?.Year + "_" + fileName?.FullName;
+
+
+                var pillarAccess = _context.UserPillarMappings
+                    .Where(x => x.UserAssessmentMappingID == UserAssessmentMappingID && x.UserID == userId && !x.IsDeleted && x.IsActive)
+                    .Select(x => x.PillarID)
+                    .ToList();
+
 
                 // Get next unanswered pillar
                 var nextPillars = await _context.Pillars
                     .Include(p => p.Questions)
                         .ThenInclude(q => q.QuestionOptions)
                     .OrderBy(p => p.DisplayOrder)
+                    .Where(x=> pillarAccess.Contains(x.PillarID))
                     .ToListAsync();
+
                 var year = DateTime.Now.Year;
                 var pillarAssessments = _context.Assessments
                     .Include(x=>x.PillarAssessments)
@@ -427,7 +425,7 @@ namespace COPPlatform.Services
         private byte[] MakePillarSheetClientReadable_Updated(
             List<Pillar> pillars,
             List<PillarAssessment> pillarAssessments,
-            int UserAssessmentMappingID, dynamic? cityUser)
+            int UserAssessmentMappingID, dynamic? info)
         {
             using (var workbook = new XLWorkbook())
             {
@@ -438,9 +436,9 @@ namespace COPPlatform.Services
                     // ----------------------------
                     // Sheet Header: City, Year, Evaluator
                     // ----------------------------
-                    ws.Range("A1:D1").Merge().Value = $"City Name: {cityUser?.CityName}";
-                    ws.Range("A2:D2").Merge().Value = $"Year: {DateTime.Now.Year}";
-                    ws.Range("A3:D3").Merge().Value = $"Evaluator/Analyst: {cityUser?.FullName}";
+                    ws.Range("A1:D1").Merge().Value = $"Assined By: {info?.FullName}";
+                    ws.Range("A2:D2").Merge().Value = $"Invitaion Year: {info?.Year}";
+                    ws.Range("A3:D3").Merge().Value = $"Due Date: {info?.DueDate}";
 
                     var headerRange = ws.Range("A1:D3");
                     headerRange.Style.Fill.BackgroundColor = XLColor.LightGray;
@@ -554,43 +552,6 @@ namespace COPPlatform.Services
                         dvScore.ErrorTitle = "Invalid Score";
                         dvScore.ErrorMessage = "Please enter an integer between 0 and 4 only.";
 
-
-
-                        row++;
-                        var infoRow = row;
-
-                        // Left side: gray info text
-                        var infoCell = ws.Cell(infoRow, 2);
-                        infoCell.Clear();
-                        infoCell.Value = "Please choose one score between 0-4, N/A, or Unknown based on the conditions below. " +
-                                         "Select the score that best matches the criteria.";
-                        infoCell.Style.Font.FontColor = XLColor.Gray;
-                        infoCell.Style.Font.Italic = true;
-                        infoCell.Style.Alignment.WrapText = true;
-                        infoCell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Top;
-
-                        // Right side: N/A / Unknown (bold)
-                        ws.Cell(infoRow, 3).Value = "N/A - Unknown";
-                        //ws.Cell(infoRow, 3).Style.Font.Bold = true;
-                        ws.Cell(infoRow, 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
-                        ws.Cell(infoRow, 3).Style.Alignment.Vertical = XLAlignmentVerticalValues.Top;
-
-                        var naCell = ws.Cell(infoRow, 4);
-                        naCell.Clear();
-
-                        // Make it editable numeric cell (int only)
-                        naCell.Value = ans.Score == null && ans.Question != null ? ans.Question.QuestionOptions?.FirstOrDefault(x=>x.OptionID == ans.QuestionOptionID)?.OptionText: "";
-                        naCell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Top;
-                        naCell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-                        naCell.Style.Font.Bold = true;
-
-                       
-                        var naScore = naCell.GetDataValidation();
-                        naScore.ShowInputMessage = true;
-                        naScore.InputTitle = "Selection";
-                        naScore.InputMessage = "Type N/A or Unknown.";
-
-                        // ===== ROW 3: Options + Comment =====
                         row++;
                         var wsCell = ws.Cell(row, 2);
                         wsCell.Clear();
@@ -669,10 +630,10 @@ namespace COPPlatform.Services
 
                     // Identify score rows (every 4th row starting from 8)
                     var firstScoreRow = 8;
-                    var lastScoreRow = row - 2;
+                    var lastScoreRow = row - 3;
 
                     string totalFormula =
-                       $"=SUMPRODUCT(--(MOD(ROW(D{firstScoreRow}:D{lastScoreRow})-ROW(D{firstScoreRow}),4)=0),--(ISNUMBER(D{firstScoreRow}:D{lastScoreRow})),D{firstScoreRow}:D{lastScoreRow})";
+                       $"=SUMPRODUCT(--(MOD(ROW(D{firstScoreRow}:D{lastScoreRow})-ROW(D{firstScoreRow}),3)=0),--(ISNUMBER(D{firstScoreRow}:D{lastScoreRow})),D{firstScoreRow}:D{lastScoreRow})";
 
 
                     ws.Cell(row, 4).FormulaA1 = totalFormula;
@@ -688,9 +649,9 @@ namespace COPPlatform.Services
 
                     string avgFormula =
                       $"=IFERROR(" +
-                      $"SUMPRODUCT(--(MOD(ROW(D{firstScoreRow}:D{lastScoreRow})-ROW(D{firstScoreRow}),4)=0),--(ISNUMBER(D{firstScoreRow}:D{lastScoreRow})),D{firstScoreRow}:D{lastScoreRow})" +
+                      $"SUMPRODUCT(--(MOD(ROW(D{firstScoreRow}:D{lastScoreRow})-ROW(D{firstScoreRow}),3)=0),--(ISNUMBER(D{firstScoreRow}:D{lastScoreRow})),D{firstScoreRow}:D{lastScoreRow})" +
                       $"/" +
-                      $"SUMPRODUCT(--(MOD(ROW(D{firstScoreRow}:D{lastScoreRow})-ROW(D{firstScoreRow}),4)=0),--(ISNUMBER(D{firstScoreRow}:D{lastScoreRow}))),\"\")";
+                      $"SUMPRODUCT(--(MOD(ROW(D{firstScoreRow}:D{lastScoreRow})-ROW(D{firstScoreRow}),3)=0),--(ISNUMBER(D{firstScoreRow}:D{lastScoreRow}))),\"\")";
 
                     ws.Cell(row, 4).FormulaA1 = avgFormula;
                     ws.Cell(row, 4).Style.Font.Bold = true;
