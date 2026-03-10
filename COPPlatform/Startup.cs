@@ -58,8 +58,8 @@ namespace COPPlatform
                 {
                     builder.WithOrigins(
                         "http://localhost:4200",
-                        "https://grandeventsystem.com/",
-                        "http://grandeventsystem.com/",
+                        "https://grandeventsystem.com",
+                        "http://grandeventsystem.com",
                         "https://grand-event-frontend.storage.googleapis.com/index.html"                        
                         )
                         .AllowAnyHeader()
