@@ -58,10 +58,9 @@ namespace COPPlatform
                 {
                     builder.WithOrigins(
                         "http://localhost:4200",
-                        "http://veridianurbansystems.com",
-                        "https://veridianurbansystems.com",
-                        "http://portal.veridianurbansystems.com",
-                        "https://portal.veridianurbansystems.com"
+                        "https://grandeventsystem.com/",
+                        "http://grandeventsystem.com/",
+                        "https://grand-event-frontend.storage.googleapis.com/index.html"                        
                         )
                         .AllowAnyHeader()
                         .AllowAnyMethod()
