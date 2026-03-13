@@ -918,6 +918,7 @@ namespace COPPlatform.Services
                         Year = x.Year,
                         DueDate = x.DueDate,
                         UpdatedAt = DateTime.UtcNow,
+                        GeographicReference = x.GeographicReference,
 
                         UserPillarMappings = x.UserPillarMappings.Where(x=>!x.IsDeleted && x.IsActive && x.UserID == userID).Select(y=> new AssignedAssessmentPillarMappingDto
                         {

@@ -11,6 +11,7 @@ namespace COPPlatform.Dtos.AssessmentDto
         public DateTime? UpdatedAt { get; set; } = DateTime.UtcNow;
         public List<AssignedAssessmentPillarMappingDto>? UserPillarMappings { get; set; }
         public string AssignedBy { get; set; }
+        public string GeographicReference { get; set; }
     }
 
     public class AssignedAssessmentPillarMappingDto

@@ -322,6 +322,7 @@ namespace COPPlatform.Services
                         UserAssessmentMappingID = g.Key.UserAssessmentMappingID,
                         Year = g.Key.Year,
                         UserID = g.Key.UserID,
+                        GeographicReference = g.Select(x => x.UserAssessmentMapping.GeographicReference).FirstOrDefault() ?? "",
                         DueDate = g.Max(x => x.DueDate),
                         UpdatedAt = g.Max(x => x.UpdatedAt),
                         NumOfUser = g.Where(x=>x.IsActive && !x.IsDeleted).Select(x=>x.UserID).Distinct().Count()

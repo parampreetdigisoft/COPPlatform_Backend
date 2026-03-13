@@ -3,6 +3,7 @@
     public class UserAssessmentMapping
     {
         public int UserAssessmentMappingID { get; set; }
+        public string GeographicReference { get; set; }
         public int Year { get; set; }
         public int UserID { get; set; }
         public UserRole Role { get; set; }
@@ -30,5 +31,6 @@
         public DateTime? UpdatedAt { get; set; } = DateTime.UtcNow;
         public User? User { get; set; }
         public Pillar? Pillar { get; set; }
+        public UserAssessmentMapping? UserAssessmentMapping { get; set; }
     }
 }

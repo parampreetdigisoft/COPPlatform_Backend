@@ -17,6 +17,7 @@ namespace COPPlatform.Dtos.UserDtos
     public class InviationUserResponseDto
     {
         public int UserAssessmentMappingID { get; set; }
+        public string GeographicReference { get; set; }
         public int Year { get; set; }
         public DateTime? DueDate { get; set; }
         public int NumOfUser { get; set; }

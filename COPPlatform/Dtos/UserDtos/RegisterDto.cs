@@ -15,6 +15,7 @@ namespace COPPlatform.Dtos.UserDtos
     {
         public int? UserAssessmentMappingID { get; set; }
         public int UserID { get; set; }
+        public string GeographicReference  { get; set; }
         public DateTime? DueDate { get; set; }
         public int Year { get; set; }
         public List<int> PillarIDs { get; set; }

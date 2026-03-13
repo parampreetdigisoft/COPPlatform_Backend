@@ -804,6 +804,7 @@ namespace COPPlatform.Services
                         {
                             UserID = inviteUser.UserID,
                             Year = inviteUser.Year,
+                            GeographicReference = inviteUser.GeographicReference,
                             DueDate = inviteUser.DueDate,
                             AssignedByUserId = invitedUserID,
                             IsActive = true,
@@ -820,6 +821,7 @@ namespace COPPlatform.Services
               
                 if(mapping !=null && userRole != UserRole.Analyst)
                 {
+                    mapping.GeographicReference = inviteUser.GeographicReference;
                     mapping.DueDate = inviteUser.DueDate;
                     mapping.IsActive = true;
                     mapping.IsDeleted = false;
