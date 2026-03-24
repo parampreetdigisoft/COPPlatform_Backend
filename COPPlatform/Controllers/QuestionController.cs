@@ -81,15 +81,24 @@ namespace COPPlatform.Controllers
             return Ok();
         }
 
-        [HttpGet("getQuestionsByCityMappingId")]
+        [HttpGet("getQuestionsByAssessmentMappingId")]
         [Authorize]
-        public async Task<IActionResult> GetQuestionsByCityIdAsync([FromQuery] CityPillerRequestDto requestDto)
+        public async Task<IActionResult> GetQuestionsByAssessmentMappingId([FromQuery] CityPillerRequestDto requestDto)
         {
             var userId = GetUserIdFromClaims();
             if (userId == null)
                 return Unauthorized("User ID not found in token.");
 
-            var result = await _questionService.GetQuestionsByCityIdAsync(requestDto, userId.GetValueOrDefault());
+            var role = GetRoleFromClaims();
+            if (role == null)
+                return Unauthorized("You Don't have access.");
+
+            if (!Enum.TryParse<UserRole>(role, true, out var userRole))
+            {
+                return Unauthorized("You Don't have access.");
+            }
+
+            var result = await _questionService.GetQuestionsByAssessmentMappingId(requestDto, userId.GetValueOrDefault(), userRole);
             if (result == null) return NotFound();
 
             return Ok(result);

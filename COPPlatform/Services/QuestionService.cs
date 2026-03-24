@@ -268,19 +268,22 @@ namespace COPPlatform.Services
                 return ResultResponseDto<string>.Failure(new string[] { "There is an error please try later" });
             }
         }
-        public async Task<ResultResponseDto<GetPillarQuestionByCityRespones>> GetQuestionsByCityIdAsync(CityPillerRequestDto request, int userId)
+        public async Task<ResultResponseDto<GetPillarQuestionByCityRespones>> GetQuestionsByAssessmentMappingId(CityPillerRequestDto request, int userId, UserRole userRole)
         {
             try
             {
-                var pillarMappings = await _context.UserPillarMappings.Where(x => x.UserAssessmentMappingID == request.UserAssessmentMappingID && x.UserID == userId && !x.IsDeleted).ToListAsync();
+                var pillarMappings = await _context.UserPillarMappings
+                    .Include(u=>u.Pillar)
+                    .Where(x => x.UserAssessmentMappingID == request.UserAssessmentMappingID 
+                    && (x.UserID == userId || (userRole == UserRole.Admin && x.UserID == x.UserAssessmentMapping.UserID))
+                    && !x.IsDeleted).ToListAsync();
+
                 if (pillarMappings.Count > 0)
-                {
-                    var year = DateTime.Now.Year;
-                    // Load assessment once (if exists)
+                {                   
                     var answeredPillarIds = new List<int>();
                     var assessment = await _context.Assessments
                         .Include(x => x.PillarAssessments).ThenInclude(x => x.Responses)
-                        .Where(a => a.UserAssessmentMappingID == request.UserAssessmentMappingID && a.UpdatedAt.Year == year && a.IsActive)
+                        .Where(a => a.UserAssessmentMappingID == request.UserAssessmentMappingID && a.IsActive)
                         .FirstOrDefaultAsync();
                     if (assessment != null)
                     {
@@ -300,14 +303,10 @@ namespace COPPlatform.Services
                         .Include(p => p.Questions)
                             .ThenInclude(q => q.QuestionOptions)
                         .Where(p => pillarMappings.Select(x => x.PillarID).Contains(p.PillarID))
-                        .Where(p => !request.PillarID.HasValue ? !answeredPillarIds.Contains(p.PillarID) : p.PillarID == request.PillarID)
+                        .Where(p => !request.PillarID.HasValue ? !answeredPillarIds.Contains(p.PillarID) : p.PillarID == request.PillarID || answeredPillarIds.Count ==14)
                         .OrderBy(p => p.DisplayOrder)
                         .FirstOrDefaultAsync();
 
-                    var summitedPillar = await _context.Pillars
-                        .Where(p => !answeredPillarIds.Contains(p.PillarID))
-                        .OrderBy(p => p.DisplayOrder)
-                        .FirstOrDefaultAsync();
 
                     if (selectPillar == null || selectPillar?.Questions == null)
                     {
@@ -359,8 +358,16 @@ namespace COPPlatform.Services
                         PillarID = selectPillar.PillarID,
                         Description = selectPillar.Description,
                         DisplayOrder = selectPillar.DisplayOrder,
-                        SubmittedPillarDisplayOrder = answeredPillarIds.Count == 14 ? 14 : summitedPillar?.DisplayOrder ?? selectPillar.DisplayOrder,
-                        Questions = questions
+                        SubmittedPillarDisplayOrder = selectPillar.DisplayOrder,
+                        Questions = questions,
+                        Pillars = pillarMappings.Select(x=> new AssessmentPillarsDto
+                        {
+                            PillarID = x.PillarID,
+                            PillarName = x.Pillar.PillarName,
+                            Description = "",
+                            DisplayOrder = x.Pillar.DisplayOrder,
+                            ImagePath = x.Pillar.ImagePath
+                        }).OrderBy(x=>x.DisplayOrder).ToList()
                     };
                     return ResultResponseDto<GetPillarQuestionByCityRespones>.Success(result, new[] { "get questions successfully" });
                 }
@@ -392,10 +399,11 @@ namespace COPPlatform.Services
 
 
                 var pillarAccess = _context.UserPillarMappings
-                    .Where(x => x.UserAssessmentMappingID == UserAssessmentMappingID && x.UserID == userId && !x.IsDeleted && x.IsActive)
+                    .Where(x => x.UserAssessmentMappingID == UserAssessmentMappingID 
+                    && x.UserID == userId || (userRole == UserRole.Admin && x.UserID == x.UserAssessmentMapping.UserID)
+                    && !x.IsDeleted && x.IsActive)
                     .Select(x => x.PillarID)
                     .ToList();
-
 
                 // Get next unanswered pillar
                 var nextPillars = await _context.Pillars

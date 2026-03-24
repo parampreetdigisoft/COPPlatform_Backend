@@ -402,7 +402,7 @@ namespace COPPlatform.Services
                             int lastRow = ws.LastRowUsed().RowNumber();
 
                             // Validate city-user mapping
-                            if (!_context.UserAssessmentMappings.Any(x => !x.IsDeleted && x.UserID == userID && x.UserAssessmentMappingID == UserAssessmentMappingID))
+                            if (!_context.UserAssessmentMappings.Any(x => !x.IsDeleted && x.UserID == userID  && x.UserAssessmentMappingID == UserAssessmentMappingID) && userRole != UserRole.Admin)
                             {
                                 return ResultResponseDto<string>.Failure(new[] { "Invalid file uploaded" });
                             }
@@ -920,7 +920,8 @@ namespace COPPlatform.Services
                         UpdatedAt = DateTime.UtcNow,
                         GeographicReference = x.GeographicReference,
 
-                        UserPillarMappings = x.UserPillarMappings.Where(x=>!x.IsDeleted && x.IsActive && x.UserID == userID).Select(y=> new AssignedAssessmentPillarMappingDto
+                        UserPillarMappings = x.UserPillarMappings.Where(x=>!x.IsDeleted && x.IsActive && x.UserID == userID)
+                        .Select(y=> new AssignedAssessmentPillarMappingDto
                         {
                             UserPillarMappingID = y.UserPillarMappingID,
                             UserID = y.UserID,
@@ -945,58 +946,94 @@ namespace COPPlatform.Services
                     .Failure(new[] { "Error in getting pillar details" });
             }
         }
-        public async Task<ResultResponseDto<List<GetAssignedAssessmentResponseDto>>>GetAssignedInvitations(int userID, UserRole userRole)
+        public async Task<ResultResponseDto<List<GetAssignedAssessmentResponseDto>>> GetAssignedInvitations(int userID, UserRole userRole)
         {
             try
             {
-                var data = await
-                    (from upm in _context.UserPillarMappings
-                     join u in _context.Users
-                        on upm.AssignedByUserId equals u.UserID into uj
-                     from assignedBy in uj.DefaultIfEmpty()
+                List<GetAssignedAssessmentResponseDto> data;
 
-                     where upm.UserID == userID
-                           && !upm.IsDeleted
-                           && upm.IsActive
+                if (userRole == UserRole.Admin)
+                {
+                    data = await _context.UserAssessmentMappings
+                        .Where(x => !x.IsDeleted && x.IsActive)
+                        .Select(upm => new GetAssignedAssessmentResponseDto
+                        {
+                            UserAssessmentMappingID = upm.UserAssessmentMappingID,
+                            UserID = upm.UserID,
+                            Year = upm.Year,
+                            DueDate = upm.DueDate,
+                            UpdatedAt = upm.UpdatedAt,
 
-                     group new { upm, assignedBy } by new
-                     {
-                         upm.UserAssessmentMappingID,
-                         upm.UserID,
-                         upm.Year,
-                         AssignedByName = assignedBy.FullName
-                     }
-                    into g
+                            AssignedBy = upm.User.FullName,
 
-                     select new GetAssignedAssessmentResponseDto
-                     {
-                         UserAssessmentMappingID = g.Key.UserAssessmentMappingID,
-                         UserID = g.Key.UserID,
-                         Year = g.Key.Year,
+                            GeographicReference = upm.GeographicReference,
 
-                         DueDate = g.Max(x => x.upm.DueDate),
-                         UpdatedAt = g.Max(x => x.upm.UpdatedAt),
+                            UserPillarMappings = upm.UserPillarMappings
+                                .Where(p => !p.IsDeleted && p.IsActive && p.UserID == upm.UserID)
+                                .Select(p => new AssignedAssessmentPillarMappingDto
+                                {
+                                    UserPillarMappingID = p.UserPillarMappingID,
+                                    UserID = p.UserID,
+                                    Year = p.Year,
+                                    DueDate = p.DueDate,
+                                    PillarID = p.PillarID,
+                                    PillarName = p.Pillar.PillarName,
+                                    Description = p.Pillar.Description,
+                                    DisplayOrder = p.Pillar.DisplayOrder,
+                                    ImagePath = p.Pillar.ImagePath
+                                })
+                                .OrderBy(p => p.DisplayOrder)
+                                .ToList()
+                        })
+                        .OrderByDescending(x => x.Year)
+                        .ToListAsync();
+                }
+                else
+                {
+                    data = await _context.UserPillarMappings
+                        .Where(x => x.UserID == userID && !x.IsDeleted && x.IsActive)
+                        .GroupBy(x => new
+                        {
+                            x.UserAssessmentMappingID,
+                            x.UserID,
+                            x.Year,
+                            x.UserAssessmentMapping.GeographicReference,
+                            x.UserAssessmentMapping.AssignedByUserId
+                        })
+                        .Select(g => new GetAssignedAssessmentResponseDto
+                        {
+                            UserAssessmentMappingID = g.Key.UserAssessmentMappingID,
+                            UserID = g.Key.UserID,
+                            Year = g.Key.Year,
 
-                         AssignedBy = g.Key.AssignedByName ?? "",
+                            DueDate = g.Max(x => x.DueDate),
+                            UpdatedAt = g.Max(x => x.UpdatedAt),
 
-                         UserPillarMappings = g
-                             .Select(x => new AssignedAssessmentPillarMappingDto
-                             {
-                                 UserPillarMappingID = x.upm.UserPillarMappingID,
-                                 UserID = x.upm.UserID,
-                                 Year = x.upm.Year,
-                                 DueDate = x.upm.DueDate,
-                                 PillarID = x.upm.PillarID,
-                                 PillarName = x.upm.Pillar.PillarName,
-                                 Description = x.upm.Pillar.Description,
-                                 DisplayOrder = x.upm.Pillar.DisplayOrder,
-                                 ImagePath = x.upm.Pillar.ImagePath
-                             })
-                             .OrderBy(p => p.DisplayOrder)
-                             .ToList()
-                     })
-                    .OrderByDescending(x => x.Year)
-                    .ToListAsync();
+                            AssignedBy = _context.Users
+                                .Where(u => u.UserID == g.Key.AssignedByUserId)
+                                .Select(u => u.FullName)
+                                .FirstOrDefault() ?? "",
+
+                            GeographicReference = g.Key.GeographicReference,
+
+                            UserPillarMappings = g.Select(p => new AssignedAssessmentPillarMappingDto
+                            {
+                                UserPillarMappingID = p.UserPillarMappingID,
+                                UserID = p.UserID,
+                                Year = p.Year,
+                                DueDate = p.DueDate,
+                                PillarID = p.PillarID,
+                                PillarName = p.Pillar.PillarName,
+                                Description = p.Pillar.Description,
+                                DisplayOrder = p.Pillar.DisplayOrder,
+                                ImagePath = p.Pillar.ImagePath
+                            })
+                            .OrderBy(p => p.DisplayOrder)
+                            .ToList()
+                        })
+                        .OrderByDescending(x => x.Year)
+                        .ToListAsync();
+                }
 
                 return ResultResponseDto<List<GetAssignedAssessmentResponseDto>>
                     .Success(data, new[] { "Pillars fetched successfully" });
@@ -1006,7 +1043,7 @@ namespace COPPlatform.Services
                 await _appLogger.LogAsync("GetAssignedInvitations", ex);
 
                 return ResultResponseDto<List<GetAssignedAssessmentResponseDto>>
-                    .Failure(new[] { "Error in getting pillar details" });
+                    .Failure(new[] { "Error while fetching assigned assessments" });
             }
         }
     }

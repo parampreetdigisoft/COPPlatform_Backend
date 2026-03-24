@@ -271,7 +271,7 @@ namespace COPPlatform.Controllers
             if (role == null)
                 return Unauthorized("You Don't have access.");
 
-            if (!Enum.TryParse<UserRole>(role, true, out var userRole) || userRole != UserRole.Analyst)
+            if (!Enum.TryParse<UserRole>(role, true, out var userRole))
             {
                 return Unauthorized("You Don't have access.");
             }

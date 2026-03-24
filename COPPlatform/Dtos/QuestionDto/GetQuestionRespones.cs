@@ -12,15 +12,21 @@ namespace COPPlatform.Dtos.QuestionDto
         public int AssessmentID { get; set; }
         public int PillarDisplayOrder { get; set; }
     }
-    public class GetPillarQuestionByCityRespones 
+    public class GetPillarQuestionByCityRespones  : AssessmentPillarsDto
     {
         public int AssessmentID { get; set; }
         public int UserAssessmentMappingID { get; set; }
+        public int SubmittedPillarDisplayOrder { get; set; }
+        public List<AssessmentPillarsDto> Pillars { get; set; }
+        public List<AssessmentQuestionResponseDto> Questions { get; set; }
+    }
+
+    public class AssessmentPillarsDto
+    {
         public int PillarID { get; set; }
         public string PillarName { get; set; }
         public int DisplayOrder { get; set; }
         public string Description { get; set; }
-        public int SubmittedPillarDisplayOrder { get; set; }
-        public List<AssessmentQuestionResponseDto> Questions { get; set; }
+        public string ImagePath { get; set; }
     }
 }
