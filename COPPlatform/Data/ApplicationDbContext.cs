@@ -34,6 +34,7 @@ namespace COPPlatform.Data
         public DbSet<GetCitiesProgressAdminDto> GetCitiesProgressAdminDto { get; set; }
         public DbSet<AIUserCityMapping> AIUserCityMappings { get; set; }
         public DbSet<UserPillarMapping> UserPillarMappings { get; set; }
+        public DbSet<AssessmentResponseHistory> AssessmentResponseHistory { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -117,11 +118,24 @@ namespace COPPlatform.Data
             modelBuilder.Entity<AnalyticalLayerPillarMapping>().HasKey(ur => ur.AnalyticalLayerPillarMappingID);
             modelBuilder.Entity<AIUserCityMapping>().HasKey(ur => ur.AIUserCityMappingID);
             modelBuilder.Entity<UserPillarMapping>().HasKey(ur => ur.UserPillarMappingID);
+            modelBuilder.Entity<AssessmentResponseHistory>(entity =>
+            {
+                entity.HasKey(arh => arh.ResponseHistoryID);
+                entity.HasOne(arh => arh.User)
+                      .WithMany()
+                      .HasForeignKey(arh => arh.UserID)
+                      .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(arh => arh.PillarAssessment)
+                      .WithMany(pa => pa.ResponseHistory)
+                      .HasForeignKey(arh => arh.ResponseID)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
 
 
 
             modelBuilder.Entity<EvaluationCityProgressResultDto>().HasNoKey().ToView(null); 
             modelBuilder.Entity<GetCitiesProgressAdminDto>().HasNoKey().ToView(null); 
+
 
             base.OnModelCreating(modelBuilder);
         }

@@ -27,7 +27,7 @@ namespace COPPlatform.Dtos.kpiDto
         public decimal? CalValue3 { get; set; }
         public decimal? CalValue4 { get; set; }
         public decimal? CalValue5 { get; set; }
-        public DateTime LastUpdated { get; set; } = DateTime.Now;
+        public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
         public int? AiInterpretationID { get; set; }
         public decimal? AiNormalizeValue { get; set; }
         public decimal? AiCalValue1 { get; set; }

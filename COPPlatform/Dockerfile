@@ -8,6 +8,6 @@ FROM mcr.microsoft.com/dotnet/aspnet:6.0
 WORKDIR /app
 COPY --from=build /app/publish .
 
-ENV ASPNETCORE_URLS=http://0.0.0.0:8080
+ENV ASPNETCORE_URLS=https://0.0.0.0:8080
 
 ENTRYPOINT ["dotnet", "COPPlatform.dll"]

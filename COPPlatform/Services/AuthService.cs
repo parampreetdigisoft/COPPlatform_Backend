@@ -111,7 +111,7 @@ namespace COPPlatform.Services
                     if (isMailSent)
                     {
                         user.ResetToken = token;
-                        user.ResetTokenDate = DateTime.Now;
+                        user.ResetTokenDate = DateTime.UtcNow;
                         _context.Users.Update(user);
                         await _context.SaveChangesAsync();
                     }
@@ -136,7 +136,7 @@ namespace COPPlatform.Services
                 {
                     return ResultResponseDto<object>.Failure(new string[] { "User not exist." });
                 }
-                if (_appSettings.LinkValidHours >= (DateTime.Now - user.ResetTokenDate).Hours)
+                if (_appSettings.LinkValidHours >= (DateTime.UtcNow - user.ResetTokenDate).Hours)
                 {
                     var hash = BCrypt.Net.BCrypt.HashPassword(password);
                     user.PasswordHash = hash;
@@ -466,7 +466,7 @@ namespace COPPlatform.Services
                 else
                 {
                     var user = users.FirstOrDefault(x => x.UserID == request.UserID);
-                    var year = DateTime.Now.Year;
+                    var year = DateTime.UtcNow.Year;
                     var assessment = await _context.Assessments.Include(x => x.UserAssessmentMapping).FirstOrDefaultAsync(x => x.UserAssessmentMappingID == request.UserAssessmentMappingID && x.CreatedAt.Year== year);
                     if (assessment != null)
                     {
@@ -557,7 +557,7 @@ namespace COPPlatform.Services
                     if (isMailSend)
                     {
                         user.ResetToken = token;
-                        user.ResetTokenDate = DateTime.Now;
+                        user.ResetTokenDate = DateTime.UtcNow;
                     }
                 }
 
@@ -601,7 +601,7 @@ namespace COPPlatform.Services
                 {
                     return ResultResponseDto<object>.Failure(new string[] { "User not exist." });
                 }
-                if (_appSettings.LinkValidHours >= (DateTime.Now - user.ResetTokenDate).Hours)
+                if (_appSettings.LinkValidHours >= (DateTime.UtcNow - user.ResetTokenDate).Hours)
                 {
                     user.IsEmailConfirmed = true;
                     _context.Users.Update(user);
@@ -675,7 +675,7 @@ namespace COPPlatform.Services
 
                 // 3️⃣ Store hashed OTP + expiry
                 user.ResetToken = otp;
-                user.ResetTokenDate = DateTime.Now; 
+                user.ResetTokenDate = DateTime.UtcNow; 
 
                 _context.Users.Update(user);
                 await _context.SaveChangesAsync();
@@ -730,7 +730,7 @@ namespace COPPlatform.Services
                 if (existingOtp != otp)
                     return ResultResponseDto<UserResponseDto>.Failure(new[] { "Incorrect OTP. Please verify and try again." });
 
-                var timeElapsed = (DateTime.Now - user.ResetTokenDate).TotalMinutes;
+                var timeElapsed = (DateTime.UtcNow - user.ResetTokenDate).TotalMinutes;
                 if (timeElapsed > _appSettings.OTPExpiryValidMinutes)
                     return ResultResponseDto<UserResponseDto>.Failure(new[] { "OTP has expired. Please request a new one." });
 

@@ -13,8 +13,8 @@ namespace COPPlatform.Models
         public double? Amount { get; set; }
         public TieredAccessPlan Tier { get; set; } = TieredAccessPlan.Pending;
         public PaymentStatus PaymentStatus { get; set; } = PaymentStatus.Pending;
-        public DateTime CreatedAt { get; set; } = DateTime.Now;
-        public DateTime ExpiredAt { get; set; } = DateTime.Now.AddYears(1);
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime ExpiredAt { get; set; } = DateTime.UtcNow.AddYears(1);
         public User User { get; set; }
     }
 }

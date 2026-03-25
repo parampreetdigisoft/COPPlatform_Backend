@@ -76,7 +76,7 @@ namespace COPPlatform.Services
                     var existing = await _context.Cities.FindAsync(q.CityID);
                     if (existing == null) return ResultResponseDto<string>.Failure(new string[] { "City not exists" });
                     existing.CityName = q.CityName;
-                    existing.UpdatedDate = DateTime.Now;
+                    existing.UpdatedDate = DateTime.UtcNow;
                     existing.Region = q.Region;
                     existing.State = q.State;
                     existing.PostalCode = q.PostalCode;
@@ -144,7 +144,7 @@ namespace COPPlatform.Services
                         CityName = cityDto.CityName,
                         State = cityDto.State,
                         Region = cityDto.Region,
-                        CreatedDate = DateTime.Now,
+                        CreatedDate = DateTime.UtcNow,
                         PostalCode = cityDto.PostalCode,
                         IsActive = true,
                         IsDeleted = false,
@@ -217,7 +217,7 @@ namespace COPPlatform.Services
                 var existing = await _context.Cities.FindAsync(id);
                 if (existing == null) return ResultResponseDto<City>.Failure(new string[] { "City not exists" });
                 existing.CityName = q.CityName;
-                existing.UpdatedDate = DateTime.Now;
+                existing.UpdatedDate = DateTime.UtcNow;
                 existing.Region = q.Region;
                 existing.State = q.State;
                 _context.Cities.Update(existing);
@@ -300,7 +300,7 @@ namespace COPPlatform.Services
 
         private IQueryable<UserCityMappingResponseDto> GetUserCityQuery(long? userId, int? year)
         {
-            year = year ?? DateTime.Now.Year;
+            year = year ?? DateTime.UtcNow.Year;
 
             return
                 from c in _context.Cities.AsNoTracking()
@@ -524,7 +524,7 @@ namespace COPPlatform.Services
                 {
                     return ResultResponseDto<List<UserCityMappingResponseDto>>.Failure(new string[] { "Invalid user" });
                 }
-                var year = DateTime.Now.Year;
+                var year = DateTime.UtcNow.Year;
                 Expression<Func<Assessment, bool>>  predicate = a => 
                 !a.UserAssessmentMapping.IsDeleted 
                 && a.UserAssessmentMapping.UserID == userId 
@@ -724,7 +724,7 @@ namespace COPPlatform.Services
                 if (user == null)
                     return ResultResponseDto<List<UserCityMappingResponseDto>>.Failure(new[] { "Invalid user" });
 
-                var year = DateTime.Now.Year;
+                var year = DateTime.UtcNow.Year;
 
                 Expression<Func<Assessment, bool>> predicate = a =>
                     !a.UserAssessmentMapping.IsDeleted &&

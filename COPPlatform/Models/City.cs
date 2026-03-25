@@ -8,7 +8,7 @@
         public string? PostalCode { get; set; }      
         public string? Region { get; set; }
         public bool IsActive { get; set; }  = true;
-        public DateTime CreatedDate { get; set; } = DateTime.Now;
+        public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedDate { get; set; }
         public bool IsDeleted { get; set; } = false;
         public string Country { get; set; }

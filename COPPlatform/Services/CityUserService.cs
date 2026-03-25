@@ -254,7 +254,7 @@ namespace COPPlatform.Services
                 if (user == null)
                     return ResultResponseDto<List<GetCitiesSubmitionHistoryReponseDto>>.Failure(new[] { "Invalid request" });
 
-                var date = DateTime.Now;
+                var date = DateTime.UtcNow;
 
                 // Get total pillars and questions
                 var pillarStats = await _context.Pillars

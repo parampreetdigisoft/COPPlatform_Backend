@@ -8,6 +8,7 @@
         public DateTime? UpdatedAt { get; set; } = DateTime.UtcNow;
         public Assessment? Assessment { get; set; }
         public Pillar? Pillar { get; set; }
+        public bool IsDeleted { get; set; } = false;
         public ICollection<AssessmentResponse> Responses { get; set; } = new List<AssessmentResponse>();
     }
 }

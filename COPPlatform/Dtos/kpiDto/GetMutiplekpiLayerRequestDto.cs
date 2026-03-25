@@ -4,6 +4,6 @@
     {
         public int LayerID { get; set; }
         public List<int> CityIDs { get; set; } 
-        public int Year { get; set; } = DateTime.Now.Year;
+        public int Year { get; set; } = DateTime.UtcNow.Year;
     }
 }

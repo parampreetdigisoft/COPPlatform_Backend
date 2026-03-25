@@ -116,7 +116,7 @@ namespace COPPlatform.Services
         {
             try
             {
-                var year = DateTime.Now.Year;
+                var year = DateTime.UtcNow.Year;
 
 
                 var cityQuery =
@@ -211,7 +211,7 @@ namespace COPPlatform.Services
         {
             try
             {
-                int currentYear = DateTime.Now.Year;
+                int currentYear = DateTime.UtcNow.Year;
 
                 var result = await _context.AIPillarScores
                     .Include(x => x.City)

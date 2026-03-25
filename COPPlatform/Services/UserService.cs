@@ -203,7 +203,7 @@ namespace COPPlatform.Services
         {
             try
             {
-                var year = DateTime.Now.Year;
+                var year = DateTime.UtcNow.Year;
                 var query =
                 from u in _context.Users
                 where !u.IsDeleted

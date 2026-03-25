@@ -14,7 +14,25 @@ namespace COPPlatform.Models
         public string? Source { get; set; }
         public int UpdatedBy { get; set; }
         public DateTime? UpdatedAt { get; set; } = DateTime.UtcNow;
+        public bool IsDeleted { get; set; } = false;
         public PillarAssessment PillarAssessment { get; set; } 
         public Question Question { get; set; } 
+
+        public ICollection<AssessmentResponseHistory> ResponseHistory { get; set; }
     }
+
+    public class AssessmentResponseHistory
+    {
+        public int ResponseHistoryID { get; set; }
+        public int ResponseID { get; set; }
+        public int UserID { get; set; }
+        public ScoreValue? Score { get; set; }
+        public string Justification { get; set; }
+        public string? Source { get; set; }
+        public DateTime? UpdatedAt { get; set; } = DateTime.UtcNow;
+        public bool IsDeleted { get; set; } = false;
+        public User? User { get; set; }
+        public AssessmentResponse? PillarAssessment { get; set; } 
+    }
+
 } 

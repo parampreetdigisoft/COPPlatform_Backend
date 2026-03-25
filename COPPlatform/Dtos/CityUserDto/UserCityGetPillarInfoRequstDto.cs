@@ -7,7 +7,7 @@ namespace COPPlatform.Dtos.CityUserDto
         public int UserID { get; set; } = 0;
         public int CityID { get; set; }
         public int PillarID { get; set; }
-        public DateTime UpdatedAt { get; set; } = new DateTime(DateTime.Now.Year, 1, 1);
+        public DateTime UpdatedAt { get; set; } = new DateTime(DateTime.UtcNow.Year, 1, 1);
         public TieredAccessPlan Tiered { get; set; } = TieredAccessPlan.Pending;
     }
 }

@@ -18,7 +18,7 @@ namespace COPPlatform
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
                     webBuilder.UseStartup<Startup>()
-                              .UseUrls($"http://0.0.0.0:{port}");
+                              .UseUrls($"https://0.0.0.0:{port}");
                 });
         }
     }
