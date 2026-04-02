@@ -9,7 +9,7 @@ namespace COPPlatform.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Policy = "StaffOnly")]
+    [Authorize]
     public class AssessmentResponseController : ControllerBase
     {
         private readonly IAssessmentResponseService _responseService;
@@ -24,10 +24,6 @@ namespace COPPlatform.Controllers
                 return userId;
 
             return null;
-        }
-        private string? GetTierFromClaims()
-        {
-            return User.FindFirst("Tier")?.Value;
         }
         private string? GetRoleFromClaims()
         {
@@ -249,7 +245,7 @@ namespace COPPlatform.Controllers
             if (role == null)
                 return Unauthorized("You Don't have access.");
 
-            if (!Enum.TryParse<UserRole>(role, true, out var userRole) || userRole != UserRole.Analyst)
+            if (!Enum.TryParse<UserRole>(role, true, out var userRole))
             {
                 return Unauthorized("You Don't have access.");
             }

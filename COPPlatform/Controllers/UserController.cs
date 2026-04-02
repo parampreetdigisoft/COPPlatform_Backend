@@ -109,7 +109,6 @@ namespace COPPlatform.Controllers
        
         [HttpGet]
         [Route("getInviations")]
-        [Authorize(Policy = "StaffOnly")]
         public async Task<IActionResult> GetInviations([FromQuery] GetInvitationRequestDto request)
         {
             var claimUserId = GetUserIdFromClaims();
@@ -130,7 +129,6 @@ namespace COPPlatform.Controllers
 
         [HttpPost]
         [Route("deleteInvitation")]
-        [Authorize(Policy = "StaffOnly")]
         public async Task<IActionResult> DeleteInvitation([FromBody] DeleteInvitationDto request)
         {
             var claimUserId = GetUserIdFromClaims();

@@ -1,4 +1,4 @@
-using COPPlatform.Common.Implementation;
+﻿using COPPlatform.Common.Implementation;
 using COPPlatform.Common.Models;
 using COPPlatform.Data;
 using COPPlatform.Dtos.AssessmentDto;
@@ -282,26 +282,40 @@ namespace COPPlatform.Services
             try
             {
 
-                Expression<Func<UserPillarMapping, bool>> pillarFilter = userRole switch
+                // ✅ STEP 1: Base Query (Single Source)
+                var query = _context.UserPillarMappings
+                    .AsNoTracking()
+                    .Where(x => !x.IsDeleted && x.IsActive);
+
+                // ✅ STEP 2: Role-based filtering (cleaner)
+                query = userRole switch
                 {
-                    UserRole.Evaluator => x => x.AssignedByUserId == userId && !x.IsDeleted && x.IsActive && (!request.Year.HasValue || x.Year == request.Year),
+                    UserRole.Evaluator =>
+                        query.Where(x => x.UserID == userId),
 
-                    UserRole.Analyst => x => !x.IsDeleted && x.IsActive 
-                                && (!request.Year.HasValue || x.Year == request.Year) && x.User.Role == request.GetUserRole && 
-                                (request.GetUserRole == UserRole.Analyst ? x.UserID == userId: x.AssignedByUserId == userId),
+                    UserRole.Analyst =>
+                        query.Where(x =>
+                            x.User.Role == request.GetUserRole &&
+                            (request.GetUserRole == UserRole.Analyst
+                                ? x.UserID == userId
+                                : x.AssignedByUserId == userId)),
 
-                    UserRole.Admin => x => !x.IsDeleted && x.IsActive && (!request.Year.HasValue || x.Year == request.Year) && x.User.Role == request.GetUserRole,
-                    _ => x => false
+                    UserRole.Admin =>
+                        query.Where(x => x.User.Role == request.GetUserRole),
 
+                    _ => query.Where(x => false)
                 };
 
+                // ✅ STEP 3: Year filter
+                if (request.Year.HasValue)
+                {
+                    query = query.Where(x => x.Year == request.Year);
+                }
 
-                var filteredMappings = _context.UserPillarMappings.Where(pillarFilter);
 
-
-                // ? STEP 1 � GROUP ONLY BY CORE KEYS
+                // ? STEP 1 — GROUP ONLY BY CORE KEYS
                 var baseQuery =
-                    from uc in filteredMappings
+                    from uc in query
                     group uc by new
                     {
                         uc.UserAssessmentMappingID,
@@ -321,7 +335,7 @@ namespace COPPlatform.Services
                         NumOfUser = g.Where(x=>x.IsActive && !x.IsDeleted).Select(x=>x.UserID).Distinct().Count()
                     };
 
-                // ? STEP 2 � PAGINATION + SEARCH
+                // ? STEP 2 — PAGINATION + SEARCH
                 var response = await baseQuery.ApplyPaginationAsync(
                     request,
                     x => string.IsNullOrEmpty(request.SearchText) ||
@@ -329,17 +343,18 @@ namespace COPPlatform.Services
                          x.FullName.Contains(request.SearchText)
                 );
 
-                // ? STEP 3 � LOAD CHILD DATA FOR PAGE ONLY
+                // ? STEP 3 — LOAD CHILD DATA FOR PAGE ONLY
                 var mappingIds = response.Data
                     .Select(x => x.UserAssessmentMappingID)
                     .ToList();
 
                 if (mappingIds.Count > 0)
                 {
-                    var pillarData = await _context.UserPillarMappings.Where(pillarFilter)
+                    var pillarData = await query
                         .Where(x => mappingIds.Contains(x.UserAssessmentMappingID))
                         .Select(x => new
                         {
+                            AssignedBy = x.UserAssessmentMapping.User,
                             x.UserAssessmentMappingID,
                             x.User,
                             Pillar = new InvitationPillarResponseDto
@@ -353,12 +368,19 @@ namespace COPPlatform.Services
                         })
                         .ToListAsync();
 
-                    // ? STEP 4 � COMBINE RESULTS
+                    // ? STEP 4 — COMBINE RESULTS
                     foreach (var item in response.Data)
                     {
                         var assessments = pillarData
                             .Where(x => x.UserAssessmentMappingID == item.UserAssessmentMappingID);
-                        
+
+                        var assignedBy = assessments.FirstOrDefault()?.AssignedBy;
+
+                        if (assignedBy != null) 
+                        {
+                            item.AssignedByName = assignedBy.FullName;
+                        }
+
                         var user = assessments?.Select(x => x.User)?.FirstOrDefault(x=>x?.UserID == item.UserID);
                         if (user != null)
                         {

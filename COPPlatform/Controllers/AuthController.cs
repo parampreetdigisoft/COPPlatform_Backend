@@ -80,7 +80,6 @@ namespace COPPlatform.Controllers
 
         [HttpPost]
         [Route("addUpdateStaffUser")]
-        [Authorize(Policy = "StaffOnly")]
         public async Task<IActionResult> AddStaffUser([FromBody] RegisterDto request)
         {
             if (request?.Email == null)
@@ -144,7 +143,6 @@ namespace COPPlatform.Controllers
         }
 
         [HttpDelete("deleteUser/{deleteUserId}")]
-        [Authorize(Policy = "StaffOnly")]
         public async Task<IActionResult> DeleteUser(int deleteUserId)
         {
             var claimUserId = GetUserIdFromClaims();
@@ -231,7 +229,6 @@ namespace COPPlatform.Controllers
 
         [HttpPost]
         [Route("addUpdateInvitation")]
-        [Authorize(Policy = "StaffOnly")]
         public async Task<IActionResult> AddUpdateInvitation([FromBody] UpdateInviteUserDto request)
         {
             var claimUserId = GetUserIdFromClaims();

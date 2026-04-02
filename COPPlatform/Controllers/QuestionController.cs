@@ -11,7 +11,7 @@ namespace COPPlatform.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Policy = "StaffOnly")]
+    [Authorize]
     public class QuestionController : ControllerBase
     {
         private readonly IQuestionService _questionService;

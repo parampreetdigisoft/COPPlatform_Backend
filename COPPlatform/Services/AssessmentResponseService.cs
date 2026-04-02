@@ -987,7 +987,7 @@ namespace COPPlatform.Services
             {
                 List<GetAssignedAssessmentResponseDto> data;
 
-                if (userRole == UserRole.Admin)
+                if (userRole == UserRole.Admin || userRole == UserRole.Executive)
                 {
                     data = await _context.UserAssessmentMappings
                         .Where(x => !x.IsDeleted && x.IsActive)
@@ -1030,15 +1030,14 @@ namespace COPPlatform.Services
                         .GroupBy(x => new
                         {
                             x.UserAssessmentMappingID,
-                            x.UserID,
                             x.Year,
                             x.UserAssessmentMapping.GeographicReference,
-                            x.UserAssessmentMapping.AssignedByUserId
+                            x.AssignedByUserId
                         })
                         .Select(g => new GetAssignedAssessmentResponseDto
                         {
                             UserAssessmentMappingID = g.Key.UserAssessmentMappingID,
-                            UserID = g.Key.UserID,
+                            UserID = g.Max(x => x.UserID),
                             Year = g.Key.Year,
 
                             DueDate = g.Max(x => x.DueDate),

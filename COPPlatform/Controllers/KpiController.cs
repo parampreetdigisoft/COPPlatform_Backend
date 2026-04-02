@@ -82,7 +82,7 @@ namespace COPPlatform.Controllers
 
         [HttpPost]
         [Route("compareCities")]
-        [Authorize(Policy = "StaffOnly")]
+        [Authorize]
         public async Task<IActionResult> CompareCities([FromBody] CompareCityRequestDto r)
         {
             var userId = GetUserIdFromClaims();

@@ -142,24 +142,11 @@ namespace COPPlatform
 
             services.AddAuthorization(options =>
             {
-                // CityUser with Standard or higher
-                options.AddPolicy("PaidCityUserOnly", policy =>
-                {
-                    policy.RequireRole("CityUser");
-                    policy.RequireAssertion(context =>
-                    {
-                        var tier = context.User.FindFirst("Tier")?.Value;
-
-                        return tier == TieredAccessPlan.Standard.ToString() ||
-                               tier == TieredAccessPlan.Premium.ToString() || tier == TieredAccessPlan.Basic.ToString();
-                    });
-                });
-
                 options.AddPolicy("AdminOnly", policy =>
                     policy.RequireRole("Admin"));
 
                 options.AddPolicy("StaffOnly", policy =>
-                    policy.RequireRole(UserRole.Admin.ToString(),UserRole.Analyst.ToString(), UserRole.Evaluator.ToString()));
+                    policy.RequireRole(UserRole.Admin.ToString(),UserRole.Executive.ToString()));
             });
 
         }

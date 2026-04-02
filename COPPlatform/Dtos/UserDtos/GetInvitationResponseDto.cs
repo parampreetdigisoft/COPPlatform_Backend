@@ -25,7 +25,7 @@ namespace COPPlatform.Dtos.UserDtos
         public string FullName { get; set; }
         public string Email { get; set; }
         public string Role { get; set; }
-        public string? CreatedByName { get; set; }
+        public string? AssignedByName { get; set; }
         public DateTime? UpdatedAt { get; set; } = DateTime.UtcNow;
 
     }

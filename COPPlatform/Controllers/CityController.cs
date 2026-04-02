@@ -10,7 +10,7 @@ namespace COPPlatform.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize(Policy = "StaffOnly")]
+    [Authorize]
     public class CityController : ControllerBase
     {
         private readonly ICityService _cityService;

@@ -10,7 +10,7 @@ namespace COPPlatform.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Policy = "StaffOnly")]
+    [Authorize]
     public class PillarController : ControllerBase
     {
         private readonly IPillarService _pillarService;
