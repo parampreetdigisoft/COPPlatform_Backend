@@ -7,22 +7,13 @@ namespace COPPlatform.Dtos.AssessmentDto
         public int AssessmentID { get; set; }
         public int UserAssessmentMappingID { get; set; }
         public DateTime? CreatedAt { get; set; }
-        public int CityID { get; set; }
-        public string State { get; set; }
-        public string CityName { get; set; }
-        public bool IsActive { get; set; } = true;
+        public string GeographicReference { get; set; }
+        public int Year { get; set; }
         public int UserID { get; set; }
-        public string UserName { get; set; }
+        public UserRole Role { get; set; }
+        public DateTime? DueDate { get; set; }
+        public string AnalystName { get; set; }
         public decimal Score { get; set; }
-        public string AssignedByUser { get; set; }
-        public int AssignedByUserId { get; set; }
-        public int AssessmentYear { get; set; } 
         public AssessmentPhase? AssessmentPhase { get; set; }
-    }
-
-    public class GetCityAssessmentResponseDto : GetAssessmentResponseDto
-    {
-        public int TotalUnknown { get; set; }
-        public int TotalNA { get; set; }
     }
 }

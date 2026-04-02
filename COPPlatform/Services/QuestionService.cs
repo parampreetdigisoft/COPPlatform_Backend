@@ -275,35 +275,41 @@ namespace COPPlatform.Services
                 var pillarMappings = await _context.UserPillarMappings
                     .Include(u=>u.Pillar)
                     .Where(x => x.UserAssessmentMappingID == request.UserAssessmentMappingID 
-                    && (x.UserID == userId || (userRole == UserRole.Admin && x.UserID == x.UserAssessmentMapping.UserID))
+                    && (x.UserID == userId || (userRole == UserRole.Admin && x.AssignedByUserId == userId))
                     && !x.IsDeleted).ToListAsync();
 
                 if (pillarMappings.Count > 0)
                 {                   
                     var answeredPillarIds = new List<int>();
                     var assessment = await _context.Assessments
-                        .Include(x => x.PillarAssessments).ThenInclude(x => x.Responses)
+                        .Include(x => x.PillarAssessments)
+                        .ThenInclude(x => x.Responses)
+                        .ThenInclude(x => x.AssessmentResponseHistories)
+                        .ThenInclude(x => x.User)
                         .Where(a => a.UserAssessmentMappingID == request.UserAssessmentMappingID && a.IsActive)
                         .FirstOrDefaultAsync();
                     if (assessment != null)
                     {
                         answeredPillarIds = assessment.PillarAssessments
+                        .Where(x=>!x.IsDeleted)
                        .Select(r => r.PillarID)
                        .ToList();
                     }
-                    if (assessment != null && answeredPillarIds.Count == pillarMappings.Count && !request.PillarID.HasValue)
+                    if (assessment != null && assessment.PillarAssessments.Count > 0 & userRole == UserRole.Admin && !request.PillarID.HasValue)
                     {
-                        request.PillarID = assessment.PillarAssessments.First().PillarID;
+                        request.PillarID = pillarMappings.First().PillarID;
                     }
-
-
+                    else if (assessment != null && assessment.PillarAssessments.Count > 0 && !request.PillarID.HasValue)
+                    {
+                        request.PillarID = pillarMappings.Last().PillarID;
+                    }
 
                     // Get next unanswered pillar
                     var selectPillar = await _context.Pillars
                         .Include(p => p.Questions)
                             .ThenInclude(q => q.QuestionOptions)
                         .Where(p => pillarMappings.Select(x => x.PillarID).Contains(p.PillarID))
-                        .Where(p => !request.PillarID.HasValue ? !answeredPillarIds.Contains(p.PillarID) : p.PillarID == request.PillarID || answeredPillarIds.Count ==14)
+                        .Where(p => !request.PillarID.HasValue ? !answeredPillarIds.Contains(p.PillarID) : p.PillarID == request.PillarID)
                         .OrderBy(p => p.DisplayOrder)
                         .FirstOrDefaultAsync();
 
@@ -329,6 +335,7 @@ namespace COPPlatform.Services
                     {
                         var questoin = editAssessmentResponse.TryGetValue(q.QuestionID, out var submittedQuestion);
                         submittedQuestion = submittedQuestion ?? new();
+
                         return new AssessmentQuestionResponseDto
                         {
                             QuestionID = q.QuestionID,
@@ -336,6 +343,16 @@ namespace COPPlatform.Services
                             PillarID = q.PillarID,
                             ResponseID = submittedQuestion.ResponseID,
                             IsSelected = submittedQuestion.QuestionID == q.QuestionID,
+                            History = submittedQuestion.AssessmentResponseHistories.Select(x=> new HistoryQuestionAnswerRawDto {
+                                UserID = x.UserID,
+                                QuestionID = q.QuestionID,
+                                OptionID = x.AssessmentResponse.QuestionOptionID,
+                                OptionText = q.QuestionOptions.FirstOrDefault(x=>x.OptionID == x.OptionID)?.OptionText ?? string.Empty,
+                                ScoreValue = x.Score,
+                                Justification = x.Justification,
+                                Source = x.Source ?? string.Empty,
+                                FullName = x.User.FullName ?? string.Empty
+                            }).ToList(),
                             QuestionOptions = q.QuestionOptions.Select(x => new QuestionOptionDto
                             {
                                 DisplayOrder = x.DisplayOrder,
@@ -350,6 +367,31 @@ namespace COPPlatform.Services
                         };
                     }).ToList();
 
+                    foreach(var q in questions)
+                    {
+                        if(assessment == null)
+                        {
+                            continue;
+                        }
+
+                        if(editAssessmentResponse.TryGetValue(q.QuestionID, out var submittedQuestion))
+                        {
+                            q.History = submittedQuestion.AssessmentResponseHistories.Select(r =>
+                                new HistoryQuestionAnswerRawDto
+                                {
+                                    UserID = r.UserID,
+                                    QuestionID = q.QuestionID,
+                                    OptionID = r.QuestionOptionID,
+                                    OptionText = q.QuestionOptions.FirstOrDefault(x=>x.OptionID == r.QuestionOptionID)?.OptionText ?? string.Empty,
+                                    ScoreValue = r.Score,
+                                    Justification = r.Justification,
+                                    Source = r.Source ?? string.Empty,
+                                    FullName = r.User.FullName ?? string.Empty
+                                }).ToList();
+                        }
+                      
+                    }
+
                     var result = new GetPillarQuestionByCityRespones
                     {
                         AssessmentID = assessment?.AssessmentID ?? 0,
@@ -358,7 +400,7 @@ namespace COPPlatform.Services
                         PillarID = selectPillar.PillarID,
                         Description = selectPillar.Description,
                         DisplayOrder = selectPillar.DisplayOrder,
-                        SubmittedPillarDisplayOrder = selectPillar.DisplayOrder,
+                        SubmittedPillarDisplayOrder = assessment?.PillarAssessments?.Count() ?? 0,
                         Questions = questions,
                         Pillars = pillarMappings.Select(x=> new AssessmentPillarsDto
                         {
@@ -392,7 +434,8 @@ namespace COPPlatform.Services
                                 {
                                     Year = m.Year,
                                     DueDate = m.DueDate,
-                                    FullName = u.FullName
+                                    FullName = u.FullName,
+                                    GeographicReference = m.GeographicReference
                                 }).FirstOrDefault();
                                
 
@@ -401,7 +444,7 @@ namespace COPPlatform.Services
 
                 var pillarAccess = _context.UserPillarMappings
                     .Where(x => x.UserAssessmentMappingID == UserAssessmentMappingID 
-                    && x.UserID == userId || (userRole == UserRole.Admin && x.UserID == x.UserAssessmentMapping.UserID)
+                    && x.UserID == userId
                     && !x.IsDeleted && x.IsActive)
                     .Select(x => x.PillarID)
                     .ToList();
@@ -414,11 +457,10 @@ namespace COPPlatform.Services
                     .Where(x=> pillarAccess.Contains(x.PillarID))
                     .ToListAsync();
 
-                var year = DateTime.UtcNow.Year;
                 var pillarAssessments = _context.Assessments
                     .Include(x=>x.PillarAssessments)
                     .ThenInclude(x=>x.Responses)
-                    .Where(a => a.UserAssessmentMappingID == UserAssessmentMappingID && a.IsActive && a.UpdatedAt.Year == year)
+                    .Where(a => a.UserAssessmentMappingID == UserAssessmentMappingID && a.IsActive)
                     .SelectMany(x => x.PillarAssessments).ToList();
 
                 var byteArray = MakePillarSheetClientReadable_Updated(nextPillars, pillarAssessments, UserAssessmentMappingID, fileName);
@@ -498,12 +540,12 @@ namespace COPPlatform.Services
                 ws.Row(2).Height = 20;
 
                 // ── Rows 3-4 : Meta ───────────────────────────────────
-                ws.Cell(3, 1).Value = "City:";
-                ws.Cell(3, 2).Value = cityUser?.CityName?.ToString() ?? "";
+                ws.Cell(3, 1).Value = "GeographicReference:";
+                ws.Cell(3, 2).Value = cityUser?.GeographicReference?.ToString() ?? "";
                 ws.Cell(3, 3).Value = "Year:";
-                ws.Cell(3, 4).Value = DateTime.UtcNow.Year;
-                ws.Cell(4, 1).Value = "Evaluator:";
-                ws.Cell(4, 2).Value = cityUser?.FullName?.ToString() ?? "";
+                ws.Cell(3, 4).Value = cityUser?.Year;
+                ws.Cell(4, 1).Value = "DueDate:";
+                ws.Cell(4, 2).Value = cityUser?.DueDate?.ToString() ?? "";
 
                 foreach (int r in new[] { 3, 4 })
                 {
@@ -592,9 +634,9 @@ namespace COPPlatform.Services
                     //    A Named Range IS recognised by Excel and works correctly.
                     string namedRangeKey = $"Opts_Q{q.QuestionID}";
                     // Remove any stale definition (e.g. re-export after code change)
-                    if (workbook.NamedRanges.Contains(namedRangeKey))
-                        workbook.NamedRanges.Delete(namedRangeKey);
-                    workbook.NamedRanges.Add(namedRangeKey,
+                    if (workbook.DefinedNames.Contains(namedRangeKey))
+                        workbook.DefinedNames.Delete(namedRangeKey);
+                    workbook.DefinedNames.Add(namedRangeKey,
                         optWs.Range(qOptStart, 1, qOptEnd, 1));
 
                     // ── Current answer text (pre-fill if data exists) ──

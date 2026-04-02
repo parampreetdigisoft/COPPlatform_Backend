@@ -112,6 +112,7 @@ namespace COPPlatform.Services
                     .Include(x=>x.UserAssessmentMapping)
                     .Include(x => x.PillarAssessments)
                     .ThenInclude(x => x.Responses)
+                     .ThenInclude(r => r.AssessmentResponseHistories)
                     .FirstOrDefaultAsync(x =>
                         x.IsActive  &&
                         (x.AssessmentID == request.AssessmentID || x.UserAssessmentMappingID == request.UserAssessmentMappingID));
@@ -155,24 +156,7 @@ namespace COPPlatform.Services
 
                     var existingResponses = pillarAssessment.Responses.ToList();
                     
-                    if (!request.IsAutoSave) // removed if entire assessement is update for all responses
-                    {
-                        var pillar = await _context.Pillars.OrderByDescending(x => x.DisplayOrder).FirstOrDefaultAsync();
-                        assessment.AssessmentPhase = pillar?.PillarID == request.PillarID ? AssessmentPhase.Completed : AssessmentPhase.InProgress;
-
-                        var requestResponseIds = request.Responses
-                            .Where(r => r.QuestionID > 0)
-                            .Select(r => r.QuestionID)
-                            .ToHashSet();
-
-                        var toDeleteList = existingResponses.Where(r => !requestResponseIds.Contains(r.QuestionID));
-
-                        foreach (var existing in toDeleteList)
-                        {
-                            _context.AssessmentResponses.Remove(existing); // <-- delete instead of unlink
-                        }
-                    }
-
+                   
                     // ADD or UPDATE responses
                     foreach (var response in request.Responses)
                     {
@@ -188,7 +172,21 @@ namespace COPPlatform.Services
                                 QuestionOptionID = response.QuestionOptionID,
                                 Justification = response.Justification,
                                 Source = response.Source,
-                                Score = response.Score
+                                Score = response.Score,
+                                AssessmentResponseHistories = new List<AssessmentResponseHistory>
+                                {
+                                    new AssessmentResponseHistory
+                                    {
+                                        Justification = response.Justification,
+                                        Score = response.Score,
+                                        Source = response.Source,
+                                        QuestionID = response.QuestionID,
+                                        QuestionOptionID = response.QuestionOptionID,
+                                        UpdatedAt = now,
+                                        UserID = userID,
+                                        IsDeleted= false
+                                    }
+                                }
                             });
                         }
                         else
@@ -199,6 +197,33 @@ namespace COPPlatform.Services
                             existing.Justification = response.Justification;
                             existing.Score = response.Score;
                             existing.Source = response.Source;
+                            existing.UpdatedAt  = now;
+
+                            var history = existing.AssessmentResponseHistories?.FirstOrDefault(h => h.UserID == userID);
+
+                            if (history == null)
+                            {
+                                existing.AssessmentResponseHistories.Add(new AssessmentResponseHistory
+                                {
+                                    Justification = response.Justification,
+                                    Score = response.Score,
+                                    Source = response.Source,
+                                    UpdatedAt = now,
+                                    UserID = userID,
+                                    QuestionID = response.QuestionID,
+                                    QuestionOptionID = response.QuestionOptionID,
+                                    IsDeleted = false
+                                });
+                            }
+                            else
+                            {
+                                history.Justification = response.Justification;
+                                history.Score = response.Score;
+                                history.Source = response.Source;
+                                history.UpdatedAt = now;
+                                history.QuestionID = response.QuestionID;
+                                history.QuestionOptionID = response.QuestionOptionID;
+                            }
                         }
                     }
                     if (request.IsFinalized)
@@ -222,95 +247,68 @@ namespace COPPlatform.Services
             }
         }
 
-        public async Task<PaginationResponse<GetCityAssessmentResponseDto>> GetAssessmentResult(GetAssessmentRequestDto request, UserRole role)
+        public async Task<PaginationResponse<GetAssessmentResponseDto>> GetAssessmentResult(GetAssessmentRequestDto request, UserRole role)
         {
             try
             {
-                var year = request.UpdatedAt.Year;
-                var startDate = new DateTime(year, 1, 1);
-                var endDate = startDate.AddYears(1);
+                // Base mapping query
+                var mappingQuery = _context.UserAssessmentMappings
+                    .Where(x => !x.IsDeleted);
 
-                // Fetch allowed UserAssessmentMapping IDs for non-admin users
-                List<int> allowedMappingIds = new();
+                // Apply Year filter once
+                if (request.Year.HasValue)
+                {
+                    mappingQuery = mappingQuery.Where(x => x.Year == request.Year.Value);
+                }
 
+                // Apply role-based filtering
                 if (role != UserRole.Admin)
                 {
-                    IQueryable<UserAssessmentMapping> mappingQuery =
-                        _context.UserAssessmentMappings.Where(x => !x.IsDeleted);
-
                     mappingQuery = role switch
                     {
-                        UserRole.Analyst =>
-                            request.SubUserID.HasValue
-                                ? mappingQuery.Where(x => x.UserID == request.SubUserID.Value)
-                                : mappingQuery.Where(x => x.AssignedByUserId == request.UserId),
+                        UserRole.Analyst => mappingQuery
+                            .Where(x => x.UserID == request.UserId),
 
-                        UserRole.Evaluator =>
-                            mappingQuery.Where(x => x.UserID == request.UserId),
+                        UserRole.Evaluator => mappingQuery
+                            .Where(x => x.UserPillarMappings
+                                .Any(up => up.UserID == request.UserId)),
 
                         _ => mappingQuery
                     };
-
-                    allowedMappingIds = await mappingQuery
-                        .Select(x => x.UserAssessmentMappingID)
-                        .ToListAsync();
                 }
 
+                // Main query (JOIN instead of Contains for better SQL)
                 var query =
                     from a in _context.Assessments
+                    join m in mappingQuery
+                        on a.UserAssessmentMappingID equals m.UserAssessmentMappingID
                     where a.IsActive
-                          && a.UpdatedAt >= startDate
-                          && a.UpdatedAt < endDate
-                          && (!request.CityID.HasValue || a.UserAssessmentMapping.Year == request.CityID.Value)
-                          && (role == UserRole.Admin || allowedMappingIds.Contains(a.UserAssessmentMappingID))
+                          && (!request.UserAssessmentMappingID.HasValue ||
+                              a.UserAssessmentMappingID == request.UserAssessmentMappingID.Value)
 
-                    join c in _context.Cities.Where(x => !x.IsDeleted)
-                        on a.UserAssessmentMapping.Year equals c.CityID
+                    let responses = a.PillarAssessments
+                        .Where(p => !p.IsDeleted)
+                        .SelectMany(p => p.Responses)
+                        .Where(r => !r.IsDeleted)
 
-                    join u in _context.Users.Where(x =>
-                            !x.IsDeleted &&
-                            (!request.Role.HasValue || x.Role == request.Role.Value))
-                        on a.UserAssessmentMapping.UserID equals u.UserID
-
-                    join createdBy in _context.Users.Where(x => !x.IsDeleted)
-                        on a.UserAssessmentMapping.AssignedByUserId equals createdBy.UserID
-
-                    let responses = a.PillarAssessments.SelectMany(p => p.Responses)
-
-                    select new GetCityAssessmentResponseDto
+                    select new GetAssessmentResponseDto
                     {
                         AssessmentID = a.AssessmentID,
                         UserAssessmentMappingID = a.UserAssessmentMappingID,
                         CreatedAt = a.CreatedAt,
-
-                        CityID = c.CityID,
-                        CityName = c.CityName,
-                        State = c.State,
-
-                        UserID = u.UserID,
-                        UserName = u.FullName,
+                        GeographicReference = m.GeographicReference,
+                        Year = m.Year,
+                        UserID = m.UserID,
+                        AnalystName = m.User.FullName,
+                        Role = m.Role,
+                        DueDate = m.DueDate,
 
                         Score = responses
-                            .Where(r => r.Score.HasValue && (int)r.Score.Value <= (int)ScoreValue.Four)
-                            .Sum(r => (int?)r.Score ?? 0),
+                            .Where(r => r.Score.HasValue &&
+                                        (int)r.Score.Value <= (int)ScoreValue.Four)
+                            .Sum(r => (int?)r.Score) ?? 0,
 
-                        TotalNA = responses.Count(r =>
-                            !r.Score.HasValue &&
-                            r.Question.QuestionOptions.Any(o =>
-                                o.OptionID == r.QuestionOptionID &&
-                                o.OptionText == "N/A" || o.OptionText == "NA")),
-
-                        TotalUnknown = responses.Count(r =>
-                            !r.Score.HasValue &&
-                            r.Question.QuestionOptions.Any(o =>
-                                o.OptionID == r.QuestionOptionID &&
-                                o.OptionText == "Unknown")),
-
-                        AssignedByUser = createdBy.FullName,
-                        AssignedByUserId = createdBy.UserID,
-
-                        AssessmentYear = year,
-                        AssessmentPhase = a.AssessmentPhase
+                        AssessmentPhase = a.AssessmentPhase,
                     };
 
                 return await query.ApplyPaginationAsync(request);
@@ -319,11 +317,11 @@ namespace COPPlatform.Services
             {
                 await _appLogger.LogAsync("Error occurred in GetAssessmentResult", ex);
 
-                return new PaginationResponse<GetCityAssessmentResponseDto>
+                return new PaginationResponse<GetAssessmentResponseDto>
                 {
-                    Data = new List<GetCityAssessmentResponseDto>(),
-                    PageNumber = 1,
-                    PageSize = 10,
+                    Data = new List<GetAssessmentResponseDto>(),
+                    PageNumber = request.PageNumber,
+                    PageSize = request.PageSize,
                     TotalRecords = 0
                 };
             }
@@ -504,8 +502,6 @@ namespace COPPlatform.Services
                     var response = await SaveAssessment(assessment, userID, userRole);
                     if (!response.Succeeded)
                         return response;
-
-                    recordSaved++;
 
                     recordSaved++;
                 }
@@ -766,6 +762,7 @@ namespace COPPlatform.Services
                 var existingAssessment = await _context.Assessments
                     .Include(a => a.PillarAssessments)
                         .ThenInclude(p => p.Responses)
+                        .ThenInclude(r=>r.AssessmentResponseHistories)
                     .FirstOrDefaultAsync(a => a.UserAssessmentMappingID == cityAssigned.UserAssessmentMappingID &&
                                               a.UpdatedAt.Year == currentDate.Year);
 

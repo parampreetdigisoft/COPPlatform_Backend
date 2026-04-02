@@ -228,19 +228,12 @@ namespace COPPlatform.Services
                     AssessmentID = a != null ? a.AssessmentID : 0,
                     UserAssessmentMappingID = uc.UserAssessmentMappingID,
                     CreatedAt = a != null ? a.CreatedAt : null,
-                    CityID = c.CityID,
-                    CityName = c.CityName,
-                    State = c.State,
-                    UserID = u.UserID,
-                    UserName = u.FullName,
+
                     Score = a != null
                         ? a.PillarAssessments.SelectMany(x => x.Responses)
                             .Where(r => r.Score.HasValue && (int)r.Score.Value <= (int)ScoreValue.Four)
                             .Sum(r => (int?)r.Score ?? 0)
                         : 0,
-                    AssignedByUser = createdBy != null ? createdBy.FullName : "",
-                    AssignedByUserId = createdBy != null ? createdBy.UserID : 0,
-                    AssessmentYear = a != null ? a.UpdatedAt.Year : 0,
                     AssessmentPhase = a != null ? a.AssessmentPhase : null
                 };
 
