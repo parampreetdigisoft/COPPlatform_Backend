@@ -775,6 +775,8 @@ namespace COPPlatform.Services
                 string msg = "Invitation updated successfully"; ;
                 UserAssessmentMapping? mapping;
 
+               bool isNewInvitation = false;
+
                 #region ADD UPDATE
 
                 if (inviteUser.UserAssessmentMappingID.HasValue)
@@ -805,7 +807,7 @@ namespace COPPlatform.Services
                     {
                         return ResultResponseDto<string>.Failure( new[] { "Assessment already exists for this year. Please update it instead." });
                     }
-                    else
+                    else if(userRole== UserRole.Admin)
                     {
                         mapping = new UserAssessmentMapping
                         {
@@ -821,9 +823,14 @@ namespace COPPlatform.Services
 
                         _context.UserAssessmentMappings.Add(mapping);
 
+                        isNewInvitation = true;
                         await _context.SaveChangesAsync();
                         msg = "Invitation created successfully";
-                    }                    
+                    }
+                    else
+                    {
+                       return ResultResponseDto<string>.Failure(new[] { "No existing assessment found to update, and only Admin can create new invitations." });
+                    }                  
                 }
               
                 if(mapping !=null && userRole != UserRole.Analyst)
@@ -862,7 +869,6 @@ namespace COPPlatform.Services
                         pillar.IsActive = true;
                         pillar.IsDeleted = false;
                         pillar.UpdatedAt = DateTime.UtcNow;
-
                         msg = "Invitation updated successfully";
                     }
                     else
@@ -880,6 +886,7 @@ namespace COPPlatform.Services
                             UpdatedAt = DateTime.UtcNow
                         });
                         msg = "Invitation created successfully";
+                        isNewInvitation = userRole != UserRole.Analyst  ? true : isNewInvitation;
                     }
                 }
 
@@ -898,6 +905,11 @@ namespace COPPlatform.Services
                 #endregion
 
                 await _context.SaveChangesAsync();
+                if (mapping !=null)
+                {
+                   await SendAssessmentMail(mapping, userRole, inviteUser.UserID, isNewInvitation);
+                }
+                
 
                 return ResultResponseDto<string>.Success(msg, new[] { msg });
             }
@@ -907,6 +919,53 @@ namespace COPPlatform.Services
                 return ResultResponseDto<string>.Failure(
                     new[] { "There is an error. Please try later." });
             }
+        }
+
+        public async Task<bool> SendAssessmentMail(UserAssessmentMapping inviteUser, UserRole userRole, int userID, bool isNewInvitation)
+        {
+            try
+            {
+                var user = await _context.Users.FirstOrDefaultAsync(x => x.UserID == userID);
+                if (user == null)
+                {
+                    return false;
+                }
+                bool isMailSent = false;
+
+                string subject = isNewInvitation
+                 ? "New Assessment Invitation – Grand Event System"
+                 : "New Pillar Assignment Added – Grand Event System";
+
+                string url = _appSettings.ApplicationUrl;
+
+                string resetLink =
+                    $"{url}/analyst/analyst-assessment?userAssessmentMappingID={inviteUser.UserAssessmentMappingID}";
+
+                var model = new EmailInvitationSendRequestDto
+                {
+                    ResetPasswordUrl = resetLink,
+                    ApiUrl = _appSettings.ApiUrl,
+                    Title = subject,
+                    ApplicationUrl = url,
+                    Mail = _appSettings.AdminMail,
+                    UserName = user.FullName,
+                    Role = user.Role
+                };
+
+                var viewPath = "~/Views/EmailTemplates/SendAssessmentTemplate.cshtml";
+
+
+                isMailSent = await _emailService
+                    .SendEmailAsync(user.Email, subject, viewPath, model);
+
+                return isMailSent;
+            }
+            catch (Exception ex)
+            {
+                await _appLogger.LogAsync("Error in SendAssessmentMail", ex);
+                return false;
+            }
+
         }
         public async Task<ResultResponseDto<object>> InviteBulkUser(InviteBulkUserDto inviteUserList, UserRole userRole, int invitedUserID)
         {

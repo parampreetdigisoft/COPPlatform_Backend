@@ -1,4 +1,6 @@
-﻿namespace COPPlatform.Views.EmailModels
+﻿using COPPlatform.Models;
+
+namespace COPPlatform.Views.EmailModels
 {
     public class EmailInvitationSendRequestDto
     {
@@ -14,7 +16,9 @@
             IsShowBtnText = true;
             IsLoginBtn = true;
             Mail = "";
+            UserName = "";
         }
+        public string UserName { get; set; }
         public string Title { get; set; }
         public string ResetPasswordUrl { get; set; }
         public string ApiUrl { get; set; }
@@ -24,6 +28,7 @@
         public string BtnText { get; set; }
         public bool IsShowBtnText { get; set; } = true;
         public bool IsLoginBtn { get; set; } = true;
+        public UserRole? Role { get; set; }
         public string Mail { get; set; }
     }
 }
