@@ -60,7 +60,8 @@ namespace COPPlatform
                         "http://localhost:4200",
                         "https://grandeventsystem.com",
                         "http://grandeventsystem.com",
-                        "https://grand-event-frontend.storage.googleapis.com/index.html"                        
+                        "https://grand-event-frontend.storage.googleapis.com",
+                        "https://grand-event-frontend.storage.googleapis.com/index.html"
                         )
                         .AllowAnyHeader()
                         .AllowAnyMethod()
@@ -86,7 +87,7 @@ namespace COPPlatform
             {
                 c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
                 {
-                    Title = "COP Platform Api",
+                    Title = "Grand Event System Api",
                     Version = "v1"
                 });
 
@@ -167,7 +168,7 @@ namespace COPPlatform
             // Enable middleware to serve Swagger UI (HTML, JS, CSS, etc.)
             app.UseSwaggerUI(c =>
             {
-                c.SwaggerEndpoint("/swagger/v1/swagger.json", "COP Platform Api");
+                c.SwaggerEndpoint("/swagger/v1/swagger.json", "Grand Event System Api");
                 c.RoutePrefix = string.Empty; // Swagger UI at root URL (e.g. https://localhost:5001/)
             });
             app.UseCors("AllowAngularApp");

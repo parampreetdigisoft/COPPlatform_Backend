@@ -74,7 +74,7 @@ namespace COPPlatform.Controllers
 
             var role = GetRoleFromClaims();
             if (role == null)
-                return Unauthorized("You Don't have access.");
+                return Unauthorized("You Don't have access."); 
 
             if (!Enum.TryParse<UserRole>(role, true, out var userRole))
             {

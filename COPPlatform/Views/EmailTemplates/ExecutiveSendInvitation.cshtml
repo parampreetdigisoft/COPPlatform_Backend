@@ -2,10 +2,13 @@
 @{
     Layout = null;
 }
+
 <!DOCTYPE html>
+
 <html>
 <body style="margin:0;padding:0;background:#F4F6FB;font-family:Arial, sans-serif;">
 
+    ```
     <table width="100%" cellpadding="0" cellspacing="0" style="background:#F4F6FB;padding:30px 0;">
         <tr>
             <td align="center">
@@ -34,33 +37,34 @@
                             <p>Dear Colleague,</p>
 
                             <p>
-                                Your analyst account for the <strong>Grand Event System</strong> platform is now active.
-                                You have been added to the assessment workspace and can begin coordinating the evaluation process.
+                                Your executive access to the <strong>Grand Event System</strong> platform is now active.
+                                You can now view high-level insights and performance summaries across assigned cities.
                             </p>
 
-                            <p>Please use the secure link below to create your password and access your dashboard:</p>
+                            <p>Please use the secure link below to set your password and access your executive dashboard:</p>
 
                             <!-- BUTTON -->
                             <div style="text-align:center;margin:20px 0 20px;">
                                 <a href="@Model.ResetPasswordUrl"
                                    style="display:inline-block;padding:14px 22px;background:#efbf04;
-                                      color:#304a43;text-decoration:none;font-weight:600;
-                                      border-radius:8px;font-size:16px;">
+                                  color:#304a43;text-decoration:none;font-weight:600;
+                                  border-radius:8px;font-size:16px;">
                                     Set Your Password
                                 </a>
                             </div>
 
-                            <p style="margin:0 0 16px;"><strong>As an analyst, you will be able to:</strong></p>
+                            <p style="margin:0 0 16px;"><strong>As an executive user, you will be able to:</strong></p>
 
                             <div style="margin:20px 0;padding:18px;background:#e6eceb;border-left:4px solid #304A43;border-radius:6px;color:#304a43;font-size:14px;">
-                                • Complete and submit assessment questionnaires<br>
-                                • Add or manage evaluators where neededs<br>
-                                • Add or manage evaluators where needed<br>
-                                • Review submissions and prepare materials for administrative review
+                                • View aggregated scores across key pillars<br>
+                                • Track overall assessment progress percentages<br>
+                                • Analyze comparative performance indicators across cities<br>
+                                • Identify risk flags and lagging areas for strategic decisions
                             </div>
 
                             <p style="margin:0 0 18px;">
-                                If you already have an active password, simply log in and continue your work.
+                                This dashboard provides a high-level, read-only view. Detailed question-level data,
+                                evaluator identities, and system controls are not visible in this role.
                             </p>
 
                             <p style="margin:0 0 18px;">
@@ -69,9 +73,11 @@
                                     @Model.Mail
                                 </a>
                             </p>
+
                             <p style="margin:0 0 18px;">
-                                Thank you for joining the assessment team.
+                                Thank you for your leadership and oversight.
                             </p>
+
                         </td>
                     </tr>
 
@@ -92,6 +98,7 @@
             </td>
         </tr>
     </table>
+    ```
 
 </body>
 </html>

@@ -79,6 +79,7 @@ namespace COPPlatform.Controllers
         }
 
         [HttpPost]
+        [Authorize]
         [Route("addUpdateStaffUser")]
         public async Task<IActionResult> AddStaffUser([FromBody] RegisterDto request)
         {

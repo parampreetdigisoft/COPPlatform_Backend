@@ -316,7 +316,7 @@ namespace COPPlatform.Services
                         .Replace("+", " ");
 
                     string subject =
-                        $"{inviteUser.Role} Access Granted – COP Platform";
+                        $"{inviteUser.Role} Access Granted – Grand Event System";
 
                     string url = _appSettings.ApplicationUrl;
 
@@ -335,10 +335,17 @@ namespace COPPlatform.Services
                         Mail = _appSettings.AdminMail
                     };
 
-                    var viewPath =
-                        inviteUser.Role == UserRole.Analyst
-                        ? "~/Views/EmailTemplates/AnalystSendInvitation.cshtml"
-                        : "~/Views/EmailTemplates/EvaluatorSendInvitation.cshtml";
+                    var viewPath = inviteUser.Role switch
+                    {
+                        UserRole.Analyst => "~/Views/EmailTemplates/AnalystSendInvitation.cshtml",
+                        UserRole.Evaluator => "~/Views/EmailTemplates/EvaluatorSendInvitation.cshtml",
+                        UserRole.Executive => "~/Views/EmailTemplates/ExecutiveSendInvitation.cshtml",
+                        _ => "",
+                    };
+                    if (viewPath == "")
+                    {
+                        return ResultResponseDto<object>.Failure(new[] { $"Invalid role for user {inviteUser.Email}." });
+                    }
 
                     isMailSent = await _emailService
                         .SendEmailAsync(user.Email, subject, viewPath, model);
@@ -994,16 +1001,21 @@ namespace COPPlatform.Services
                             Mail = _appSettings.AdminMail
                         };
 
-                        var viewPath =
-                            inviteUser.Role == UserRole.Analyst
-                            ? "~/Views/EmailTemplates/AnalystSendInvitation.cshtml"
-                            : "~/Views/EmailTemplates/EvaluatorSendInvitation.cshtml";
+                        var viewPath = inviteUser.Role switch
+                        {
+                            UserRole.Analyst => "~/Views/EmailTemplates/AnalystSendInvitation.cshtml",
+                            UserRole.Evaluator => "~/Views/EmailTemplates/EvaluatorSendInvitation.cshtml",
+                            UserRole.Executive => "~/Views/EmailTemplates/ExecutiveSendInvitation.cshtml",
+                            _ =>"",
+                        };
+                        if(viewPath == "")
+                        {
+                            errors.Add($"Invalid role for user {inviteUser.Email}.");
+                            continue;
+                        }
+                      
 
-                        emailTasks.Add(_emailService.SendEmailAsync(
-                            inviteUser.Email,
-                            subject,
-                            viewPath,
-                            model));
+                        emailTasks.Add(_emailService.SendEmailAsync(inviteUser.Email, subject, viewPath, model));
 
                         user.ResetToken = token;
                         user.ResetTokenDate = DateTime.UtcNow;
