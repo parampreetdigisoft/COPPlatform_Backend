@@ -93,7 +93,7 @@ namespace COPPlatform.Services
                     var url = user.Role != UserRole.Executive ? _appSettings.ApplicationUrl : _appSettings.PublicApplicationUrl;
                     string passwordResetLink = url + "/auth/reset-password?PasswordToken=" + token;
 
-                    var sub = "Password Update Link – Veridian Urban Index Platform";
+                    var sub = "Password Update Link – Grand Event Readiness System";
                     var model = new EmailInvitationSendRequestDto
                     {
                         ResetPasswordUrl = passwordResetLink,
@@ -1057,7 +1057,7 @@ namespace COPPlatform.Services
                             $"{url}/auth/reset-password?PasswordToken={token}";
 
                         string subject =
-                            $"{inviteUser.Role} Access Granted – Veridian Urban Index Platform";
+                            $"{inviteUser.Role} Access Granted – Grand Event Readiness System";
 
                         var model = new EmailInvitationSendRequestDto
                         {
