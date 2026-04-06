@@ -1,14 +1,16 @@
 ﻿using COPPlatform.Common.Implementation;
+using COPPlatform.Common.Interface;
 using COPPlatform.Common.Models;
+using COPPlatform.Common.Models.settings;
 using COPPlatform.Data;
 using COPPlatform.Dtos.AssessmentDto;
-using COPPlatform.Dtos.CityDto;
 using COPPlatform.Dtos.CommonDto;
-using COPPlatform.Dtos.PublicDto;
 using COPPlatform.Dtos.UserDtos;
 using COPPlatform.IServices;
 using COPPlatform.Models;
+using COPPlatform.Views.EmailModels;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Linq.Expressions;
 
 namespace COPPlatform.Services
@@ -18,11 +20,15 @@ namespace COPPlatform.Services
         private readonly IAppLogger _appLogger;
         private readonly ApplicationDbContext _context;
         private readonly IWebHostEnvironment _env;
-        public UserService(ApplicationDbContext context, IAppLogger appLogger, IWebHostEnvironment env)
+        private readonly AppSettings _appSettings;
+        private readonly IEmailService _emailService;
+        public UserService(ApplicationDbContext context, IAppLogger appLogger, IWebHostEnvironment env, IOptions<AppSettings> appSettings, IEmailService emailService)
         {
             _context = context;
             _appLogger = appLogger;
             _env = env;
+            _appSettings = appSettings.Value;
+            _emailService = emailService;
         }
         public User GetByEmail(string email)
         {
@@ -135,70 +141,7 @@ namespace COPPlatform.Services
                     .Failure(new[] { "There is an error, please try later" });
             }
         }
-
-
-        public async Task<ResultResponseDto<UpdateUserResponseDto>> UpdateUser(UpdateUserDto requestDto)
-        {
-            try
-            {
-                var user = await _context.Users.FindAsync(requestDto.UserID);
-                if (user == null)
-                    return ResultResponseDto<UpdateUserResponseDto>.Failure(new List<string>() { "Invalid request " });
-
-                // Update fields
-                user.FullName = requestDto.FullName;
-                user.Phone = requestDto.Phone;
-                user.Is2FAEnabled = requestDto.Is2FAEnabled;
-                // Handle profile image upload
-                if (requestDto.ProfileImage != null)
-                {
-                    string uploadsFolder = Path.Combine(_env.WebRootPath, "uploads");
-                    if (!Directory.Exists(uploadsFolder))
-                        Directory.CreateDirectory(uploadsFolder);
-
-                    // ?? Remove old image if exists
-                    if (!string.IsNullOrEmpty(user.ProfileImagePath))
-                    {
-                        string oldFilePath = Path.Combine(_env.WebRootPath, user.ProfileImagePath.TrimStart('/'));
-                        if (File.Exists(oldFilePath))
-                        {
-                            File.Delete(oldFilePath);
-                        }
-                    }
-
-                    // Save new image
-                    string fileName = Guid.NewGuid().ToString() + Path.GetExtension(requestDto.ProfileImage.FileName);
-                    string filePath = Path.Combine(uploadsFolder, fileName);
-
-                    using (var stream = new FileStream(filePath, FileMode.Create))
-                    {
-                        await requestDto.ProfileImage.CopyToAsync(stream);
-                    }
-
-                    user.ProfileImagePath = "/uploads/" + fileName;
-                }
-
-                _context.Users.Update(user);
-                await _context.SaveChangesAsync();
-
-                var response = new UpdateUserResponseDto
-                {
-                    UserID = user.UserID,
-                    FullName = user.FullName,
-                    Phone = user.Phone,
-                    Is2FAEnabled = user.Is2FAEnabled,
-                    ProfileImagePath = user.ProfileImagePath,
-                    Tier = user.Tier ?? Enums.TieredAccessPlan.Pending
-                };
-
-                return ResultResponseDto<UpdateUserResponseDto>.Success(response, new List<string> { "Updated successfully" });
-            }
-            catch (Exception ex)
-            {
-                await _appLogger.LogAsync("Error Occure UpdateUser", ex);
-                return ResultResponseDto<UpdateUserResponseDto>.Failure(new string[] { "There is an error please try later" });
-            }
-        }
+        
         public async Task<ResultResponseDto<List<GetAssessmentResponseDto>>> GetUsersAssignedToCity(int cityId)
         {
             try
@@ -449,5 +392,120 @@ namespace COPPlatform.Services
                 return ResultResponseDto<string>.Failure(new string[] { "An error occurred. Please try again later." });
             }
         }
+        public async Task<ResultResponseDto<UpdateUserResponseDto>> UpdateUser(UpdateUserDto requestDto)
+        {
+            try
+            {
+                var user = await _context.Users.FindAsync(requestDto.UserID);
+                if (user == null)
+                    return ResultResponseDto<UpdateUserResponseDto>.Failure(new List<string>() { "Invalid request " });
+
+                // Handle profile image upload
+                if (requestDto.ProfileImage != null)
+                {
+                    string uploadsFolder = Path.Combine(_env.WebRootPath, "uploads");
+                    if (!Directory.Exists(uploadsFolder))
+                        Directory.CreateDirectory(uploadsFolder);
+
+                    // ?? Remove old image if exists
+                    if (!string.IsNullOrEmpty(user.ProfileImagePath))
+                    {
+                        string oldFilePath = Path.Combine(_env.WebRootPath, user.ProfileImagePath.TrimStart('/'));
+                        if (File.Exists(oldFilePath))
+                        {
+                            File.Delete(oldFilePath);
+                        }
+                    }
+
+                    // Save new image
+                    string fileName = Guid.NewGuid().ToString() + Path.GetExtension(requestDto.ProfileImage.FileName);
+                    string filePath = Path.Combine(uploadsFolder, fileName);
+
+                    using (var stream = new FileStream(filePath, FileMode.Create))
+                    {
+                        await requestDto.ProfileImage.CopyToAsync(stream);
+                    }
+
+                    user.ProfileImagePath = "/uploads/" + fileName;
+                }
+
+
+                if (requestDto.Email != user.Email)
+                {
+                    var email = requestDto.Email.Trim().ToLower();
+
+                    var isDuplicate = await _context.Users
+                        .AnyAsync(x => x.Email.ToLower() == email
+                                    && x.UserID != requestDto.UserID);
+                    if (isDuplicate)
+                    {
+                        return ResultResponseDto<UpdateUserResponseDto>
+                            .Failure(new List<string> { "Email already exists." });
+                    }
+
+                    var url = _appSettings.ApplicationUrl;
+                    var hash = BCrypt.Net.BCrypt.HashPassword(requestDto.Email);
+                    var token = hash.Replace("+", " ");
+                    var passwordResetLink = $"{url}/auth/confirm-mail?PasswordToken={token}";
+
+                    var emailModel = new EmailInvitationSendRequestDto
+                    {
+                        ResetPasswordUrl = passwordResetLink,
+                        Title = "Verify Your Email",
+                        ApiUrl = _appSettings.ApiUrl,
+                        ApplicationUrl = url,
+                        MsgText = "A request was made to update the Email for your Grand Event System account. Please verify your email and reset your password.",
+                        Mail = _appSettings.AdminMail,
+                        BtnText = "Verify",
+                        DescriptionAboutBtnText = "Please verify your email address by clicking the button above."
+                    };
+
+                    var isMailSent = await _emailService.SendEmailAsync(requestDto.Email, "Verify Your Email",
+                        "~/Views/EmailTemplates/ChangePassword.cshtml", emailModel
+                    );
+
+                    if (isMailSent)
+                    {
+                        user.IsEmailConfirmed = false; // Require reconfirmation for new email
+                        user.TemporaryMail = requestDto.Email;
+                        user.ResetToken = token;
+                        user.ResetTokenDate = DateTime.Now;
+                    }
+                    else
+                    {
+                        return ResultResponseDto<UpdateUserResponseDto>.Failure(new List<string>()
+                            { "Failed to send email confirmation. Please try again later." }
+                        );
+                    }
+                }
+
+                // Update fields
+                user.FullName = requestDto.FullName;
+                user.Phone = requestDto.Phone;
+                user.Is2FAEnabled = requestDto.Is2FAEnabled;
+
+                _context.Users.Update(user);
+                await _context.SaveChangesAsync();
+
+                var response = new UpdateUserResponseDto
+                {
+                    UserID = user.UserID,
+                    FullName = user.FullName,
+                    Phone = user.Phone,
+                    Email = user.Email,
+                    Is2FAEnabled = user.Is2FAEnabled,
+                    ProfileImagePath = user.ProfileImagePath,
+                    Tier = user.Tier ?? Enums.TieredAccessPlan.Pending
+                };
+
+                return ResultResponseDto<UpdateUserResponseDto>.Success(response, new List<string> { "Updated successfully" });
+            }
+            catch (Exception ex)
+            {
+                await _appLogger.LogAsync("Error Occure UpdateUser", ex);
+                return ResultResponseDto<UpdateUserResponseDto>.Failure(new string[] { "There is an error please try later" });
+            }
+        }
+
     }
 }

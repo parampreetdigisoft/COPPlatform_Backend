@@ -611,8 +611,14 @@ namespace COPPlatform.Services
                 if (_appSettings.LinkValidHours >= (DateTime.UtcNow - user.ResetTokenDate).Hours)
                 {
                     user.IsEmailConfirmed = true;
-                    _context.Users.Update(user);
-                    await _context.SaveChangesAsync();
+                    if (!string.IsNullOrEmpty(user.TemporaryMail))
+                    {
+                        user.Email = user.TemporaryMail;
+                        user.TemporaryMail = null;
+
+                        _context.Users.Update(user);
+                        await _context.SaveChangesAsync();
+                    }
 
                     return ResultResponseDto<object>.Success(new { }, new string[] { "Mail Confirmed Successfully, You Can Login Now!" });
                 }
@@ -886,7 +892,7 @@ namespace COPPlatform.Services
                             UpdatedAt = DateTime.UtcNow
                         });
                         msg = "Invitation created successfully";
-                        isNewInvitation = userRole == UserRole.Analyst  ? true : isNewInvitation;
+                        isNewInvitation = userRole == UserRole.Analyst  ? true : isNewInvitation;//admin add analyst
                     }
                 }
 
