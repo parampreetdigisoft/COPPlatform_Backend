@@ -886,7 +886,7 @@ namespace COPPlatform.Services
                             UpdatedAt = DateTime.UtcNow
                         });
                         msg = "Invitation created successfully";
-                        isNewInvitation = userRole != UserRole.Analyst  ? true : isNewInvitation;
+                        isNewInvitation = userRole == UserRole.Analyst  ? true : isNewInvitation;
                     }
                 }
 
@@ -938,8 +938,16 @@ namespace COPPlatform.Services
 
                 string url = _appSettings.ApplicationUrl;
 
-                string resetLink =
-                    $"{url}/analyst/analyst-assessment?userAssessmentMappingID={inviteUser.UserAssessmentMappingID}";
+                string resetLink = string.Empty; 
+
+                if (user.Role == UserRole.Analyst)
+                {
+                   resetLink = $"{url}/analyst/analyst-assessment?userAssessmentMappingID={inviteUser.UserAssessmentMappingID}";
+                }
+                else
+                {
+                    resetLink = $"{url}/evaluator/make-assessment?userAssessmentMappingID={inviteUser.UserAssessmentMappingID}";
+                }
 
                 var model = new EmailInvitationSendRequestDto
                 {

@@ -51,6 +51,7 @@ namespace COPPlatform.Services
                     PillarID = q.PillarID,
                     PillarName = q.Pillar.PillarName,
                     DisplayOrder = q.DisplayOrder,
+                    IsCritical =q.IsCritical,
                     QuestionOptions = q.QuestionOptions.ToList()
                 };
 
@@ -139,6 +140,7 @@ namespace COPPlatform.Services
                 question.IsDeleted = false;
                 question.QuestionText = q.QuestionText;
                 question.PillarID = q.PillarID;
+                question.IsCritical = q.IsCritical;
 
                 // Sync options (Add / Update / Delete)
                 var incomingOptions = q.QuestionOptions ?? new List<QuestionOption>();
@@ -276,7 +278,7 @@ namespace COPPlatform.Services
                     .Include(u=>u.Pillar)
                     .Where(x => x.UserAssessmentMappingID == request.UserAssessmentMappingID 
                     && (x.UserID == userId || (userRole == UserRole.Admin && x.AssignedByUserId == userId))
-                    && !x.IsDeleted).ToListAsync();
+                    && !x.IsDeleted && x.IsActive).ToListAsync();
 
                 if (pillarMappings.Count > 0)
                 {                   
@@ -309,7 +311,7 @@ namespace COPPlatform.Services
                         .Include(p => p.Questions)
                             .ThenInclude(q => q.QuestionOptions)
                         .Where(p => pillarMappings.Select(x => x.PillarID).Contains(p.PillarID))
-                        .Where(p => !request.PillarID.HasValue ? !answeredPillarIds.Contains(p.PillarID) : p.PillarID == request.PillarID)
+                        .Where(p => !request.PillarID.HasValue ? !answeredPillarIds.Contains(p.PillarID) : p.PillarID == request.PillarID && !p.IsLocked)
                         .OrderBy(p => p.DisplayOrder)
                         .FirstOrDefaultAsync();
 

@@ -74,16 +74,29 @@ namespace COPPlatform.Services
             {
                 var existing = await _context.Pillars.FindAsync(id);
                 if (existing == null) return null;
+
+                if(existing.IsLocked != pillar.IsLocked)
+                {
+                    var pillars = _context.UserPillarMappings.Where(x => x.PillarID == id);
+
+                    foreach (var p in pillars)
+                    {
+                        p.IsActive = !pillar.IsLocked;
+                    }
+                }                            
+
                 existing.PillarName = pillar.PillarName;
                 existing.Description = pillar.Description;
                 existing.DisplayOrder = pillar.DisplayOrder;
+                existing.IsLocked = pillar.IsLocked;
 
                 if (existing.Weight != pillar.Weight || existing.Reliability != pillar.Reliability)
                 {
                     existing.Weight = pillar.Weight;
                     existing.Reliability = pillar.Reliability;
                     _download.InsertAnalyticalLayerResults();
-                }
+                }                
+
                 await _context.SaveChangesAsync();
 
                 return existing;

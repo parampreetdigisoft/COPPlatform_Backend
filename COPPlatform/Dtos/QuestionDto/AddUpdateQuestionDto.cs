@@ -8,6 +8,7 @@ namespace COPPlatform.Dtos.QuestionDto
         public int QuestionID { get; set; } = 0;
         public int PillarID { get; set; }
         public string QuestionText { get; set; }
+        public bool IsCritical { get; set; } = false;
         public bool IsSelected { get; set; } = false;
         public List<QuestionOption> QuestionOptions { get; set; }
     }

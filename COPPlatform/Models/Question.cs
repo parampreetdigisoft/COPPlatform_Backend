@@ -8,6 +8,7 @@ namespace COPPlatform.Models
         public int DisplayOrder { get; set; }
         public Pillar Pillar { get; set; }
         public bool IsDeleted { get; set; } = false;
+        public bool IsCritical { get; set; } = false;
         public ICollection<QuestionOption> QuestionOptions { get; set; } = new List<QuestionOption>();
     }
 } 
