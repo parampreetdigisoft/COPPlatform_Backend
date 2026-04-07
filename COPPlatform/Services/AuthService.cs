@@ -90,7 +90,7 @@ namespace COPPlatform.Services
                     var passwordToken = hash;
                     var token = passwordToken.Replace("+", " ");
 
-                    var url = user.Role != UserRole.Executive ? _appSettings.ApplicationUrl : _appSettings.PublicApplicationUrl;
+                    var url = _appSettings.ApplicationUrl;
                     string passwordResetLink = url + "/auth/reset-password?PasswordToken=" + token;
 
                     var sub = "Password Update Link – Grand Event Readiness System";
@@ -543,14 +543,14 @@ namespace COPPlatform.Services
                 {
                     var hash = BCrypt.Net.BCrypt.HashPassword(request.Email);
                     var token = hash.Replace("+", " "); // Replace + to avoid URL issues
-                    var passwordResetLink = $"{_appSettings.PublicApplicationUrl}/auth/confirm-mail?PasswordToken={token}";
+                    var passwordResetLink = $"{_appSettings.ApplicationUrl}/auth/confirm-mail?PasswordToken={token}";
 
                     var emailModel = new EmailInvitationSendRequestDto
                     {
                         ResetPasswordUrl = passwordResetLink,
                         Title = "Verify Your Email",
                         ApiUrl = _appSettings.ApiUrl,
-                        ApplicationUrl = _appSettings.PublicApplicationUrl,
+                        ApplicationUrl = _appSettings.ApplicationUrl,
                         MsgText = "Thank you for signing up! Please verify your email and reset your password to complete registration.",
                         Mail = _appSettings.AdminMail
                     };
@@ -642,7 +642,7 @@ namespace COPPlatform.Services
                     ResetPasswordUrl = "",
                     Title = $"{requestDto.Subject} - {requestDto.Email}",
                     ApiUrl = _appSettings.ApiUrl,
-                    ApplicationUrl = _appSettings.PublicApplicationUrl,
+                    ApplicationUrl = _appSettings.ApplicationUrl,
                     MsgText = requestDto.Message,
                     DescriptionAboutBtnText
                         = $"This email was sent by {requestDto.Name} from {requestDto.City}, {requestDto.Country}. You can reach them at: {requestDto.Email}.",
@@ -693,7 +693,7 @@ namespace COPPlatform.Services
                 _context.Users.Update(user);
                 await _context.SaveChangesAsync();
 
-                var url = user.Role != UserRole.Executive ? _appSettings.ApplicationUrl : _appSettings.PublicApplicationUrl;
+                var url = _appSettings.ApplicationUrl;
                 // 4️⃣ Send the OTP via email
                 var model = new EmailInvitationSendRequestDto
                 {
@@ -1055,9 +1055,7 @@ namespace COPPlatform.Services
                             .HashPassword(inviteUser.Email)
                             .Replace("+", " ");
 
-                        var url = user.Role != UserRole.Executive
-                            ? _appSettings.ApplicationUrl
-                            : _appSettings.PublicApplicationUrl;
+                        var url = _appSettings.ApplicationUrl;
 
                         string resetLink =
                             $"{url}/auth/reset-password?PasswordToken={token}";
