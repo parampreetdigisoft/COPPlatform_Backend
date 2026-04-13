@@ -16,7 +16,7 @@ namespace COPPlatform.IServices
         Task<Pillar> UpdateAsync(int id, UpdatePillarDto pillar);
         Task<bool> DeleteAsync(int id);
         Task<Tuple<string, byte[]>> ExportPillarsHistoryByUserId(GetCityPillarHistoryRequestDto requestDto);
-        Task<PaginationResponse<PillarsHistroyResponseDto>> GetResponsesByUserId(GetPillarResponseHistoryRequestNewDto request, UserRole userRole);
+        Task<ResultResponseDto<List<PillarsHistroyResponseDto>>> GetResponsesByUserId(GetPillarResponseHistoryRequestNewDto request, int userId, UserRole userRole);
 
     }
 } 

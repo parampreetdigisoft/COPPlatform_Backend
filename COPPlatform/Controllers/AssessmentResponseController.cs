@@ -231,7 +231,6 @@ namespace COPPlatform.Controllers
             return Ok(result);
         }
 
-
         [HttpGet]
         [Route("getAssignedAssessments")] // for Analyst only
         [Authorize]
@@ -275,6 +274,31 @@ namespace COPPlatform.Controllers
             return Ok(result);
         }
 
+        /// <summary>
+        /// This API is used to get the assessment pillar history 
+        /// </summary>
+        /// <param name="UserAssessmentMappingID"></param>
+        /// <returns></returns>
+        [HttpGet]
+        [Route("getDashboardPillarHistory")]
+        [Authorize]
+        public async Task<IActionResult> GetDashboardPillarHistory([FromQuery] UserDashBoardRequstDto userRequstDto)
+        {
+            var userId = GetUserIdFromClaims();
+            if (userId == null)
+                return Unauthorized("User ID not found in token.");
+
+            var role = GetRoleFromClaims();
+            if (role == null)
+                return Unauthorized("You Don't have access.");
+
+            if (!Enum.TryParse<UserRole>(role, true, out var userRole))
+            {
+                return Unauthorized("You Don't have access.");
+            }
+            var result = await _responseService.GetDashboardPillarHistory(userRequstDto, userId.GetValueOrDefault(), userRole);
+            return Ok(result);
+        }
 
     }
 }

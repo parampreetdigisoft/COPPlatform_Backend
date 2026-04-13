@@ -89,6 +89,7 @@ namespace COPPlatform.Controllers
                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                content.Item1);
         }
+
         [HttpPost("GetResponsesByUserId")]
         public async Task<IActionResult> GetResponsesByUserId([FromBody] GetPillarResponseHistoryRequestNewDto requestDto)
         {
@@ -106,7 +107,7 @@ namespace COPPlatform.Controllers
             }
 
             requestDto.UserId = claimUserId;
-            var response = await _pillarService.GetResponsesByUserId(requestDto, userRole);
+            var response = await _pillarService.GetResponsesByUserId(requestDto, claimUserId.GetValueOrDefault(), userRole);
             return Ok(response);
         }
     }

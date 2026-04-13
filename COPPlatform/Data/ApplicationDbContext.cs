@@ -35,6 +35,7 @@ namespace COPPlatform.Data
         public DbSet<AIUserCityMapping> AIUserCityMappings { get; set; }
         public DbSet<UserPillarMapping> UserPillarMappings { get; set; }
         public DbSet<AssessmentResponseHistory> AssessmentResponseHistories { get; set; }
+        public DbSet<UserEvaluationPillarProgressResultDto> UserEvaluationPillarProgressResults { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -134,6 +135,7 @@ namespace COPPlatform.Data
 
             modelBuilder.Entity<EvaluationCityProgressResultDto>().HasNoKey().ToView(null); 
             modelBuilder.Entity<GetCitiesProgressAdminDto>().HasNoKey().ToView(null); 
+            modelBuilder.Entity<UserEvaluationPillarProgressResultDto>().HasNoKey().ToView(null); 
 
 
             base.OnModelCreating(modelBuilder);

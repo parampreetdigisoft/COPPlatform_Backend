@@ -7,9 +7,8 @@ namespace COPPlatform.Dtos.AssessmentDto
 
     public class GetPillarResponseHistoryRequestNewDto : PaginationRequest
     {
-        public int CityID { get; set; }
+        public int UserAssessmentMappingID { get; set; }
         public int? PillarID { get; set; }
-        public DateTime UpdatedAt { get; set; } = new DateTime(DateTime.UtcNow.Year, 1, 1);
     }
     public class GetCityPillarHistoryRequestDto
     {
@@ -59,5 +58,10 @@ namespace COPPlatform.Dtos.AssessmentDto
         public int UserID { get; set; }
         public int AssessmentID { get; set; }
         public AssessmentPhase AssessmentPhase { get; set; }
+    }
+
+    public class UserDashBoardRequstDto
+    {
+        public int UserAssessmentMappingID { get; set; }
     }
 }

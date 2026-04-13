@@ -53,8 +53,45 @@ namespace COPPlatform.Common.Implementation
             }
             catch (Exception ex)
             {
-                await _appLogger.LogAsync("Error in Executing usp_getCitiesProgressByUserId", ex);
+                await _appLogger.LogAsync("Error in Executing usp_getCitiesProgress_Admin", ex);
                 return new List<GetCitiesProgressAdminDto>();
+            }
+        }
+        public async Task<List<EvaluationCityProgressResultDto>> GetAssessmentProgressAsync(int userId, int role)
+        {
+            try
+            {
+                return await _context.CityProgressResults
+                 .FromSqlRaw(
+                     "EXEC usp_getAssessmentProgressByUserId @userID, @role",
+                     new SqlParameter("@userID", userId),
+                     new SqlParameter("@role", role)
+                 )
+                 .AsNoTracking()
+                 .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                await _appLogger.LogAsync("Error in Executing usp_getAssessmentProgressByUserId", ex);
+                return new List<EvaluationCityProgressResultDto>();
+            }
+        }
+        public async Task<List<UserEvaluationPillarProgressResultDto>> GetUserProgressByAssessmentId(int userAssessmentMappingID)
+        {
+            try
+            {
+                return await _context.UserEvaluationPillarProgressResults
+                 .FromSqlRaw(
+                     "EXEC usp_getUserProgressByAssessmentId @UserAssessmentMappingID",
+                     new SqlParameter("@UserAssessmentMappingID", userAssessmentMappingID)
+                 )
+                 .AsNoTracking()
+                 .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                await _appLogger.LogAsync("Error in Executing usp_getUserProgressByAssessmentId", ex);
+                return new List<UserEvaluationPillarProgressResultDto>();
             }
         }
     }

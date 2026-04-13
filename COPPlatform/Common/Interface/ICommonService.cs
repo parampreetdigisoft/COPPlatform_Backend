@@ -13,5 +13,7 @@ namespace COPPlatform.Common.Interface
         /// <returns></returns>
         public Task<List<EvaluationCityProgressResultDto>> GetCitiesProgressAsync(int userId,int role, int year);
         public Task<List<GetCitiesProgressAdminDto>> GetCitiesProgressForAdmin(int userId, int role, int year);
+        public Task<List<EvaluationCityProgressResultDto>> GetAssessmentProgressAsync(int userId,int role);
+        Task<List<UserEvaluationPillarProgressResultDto>> GetUserProgressByAssessmentId(int userAssessmentMappingID);
     }
 }

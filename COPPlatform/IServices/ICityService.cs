@@ -2,6 +2,7 @@
 using COPPlatform.Dtos.AssessmentDto;
 using COPPlatform.Dtos.CityDto;
 using COPPlatform.Dtos.CommonDto;
+using COPPlatform.Dtos.dashboard;
 using COPPlatform.Models;
 
 namespace COPPlatform.IServices
@@ -24,5 +25,7 @@ namespace COPPlatform.IServices
         Task<ResultResponseDto<List<UserCityMappingResponseDto>>> getAllCityByLocation(GetNearestCityRequestDto r);
         Task<ResultResponseDto<List<UserCityMappingResponseDto>>> GetAiAccessCity(int userId, UserRole userRole);
         Task<ResultResponseDto<byte[]>> ExportCities(int userId, UserRole userRole);
+        Task<ResultResponseDto<CardDetailsDto>> GetCardDetails(int userID, UserRole userRole);
+
     }
 }

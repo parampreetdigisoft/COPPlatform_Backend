@@ -259,5 +259,26 @@ namespace COPPlatform.Controllers
             );
         }
 
+        [HttpGet]
+        [Authorize]
+        [Route("GetCardDetails")]
+        public async Task<IActionResult> GetCardDetails()
+        {
+            var claimUserId = GetUserIdFromClaims();
+            if (claimUserId == null)
+                return Unauthorized("User ID not found.");
+
+            var role = GetRoleFromClaims();
+            if (role == null)
+                return Unauthorized("You Don't have access.");
+
+            if (!Enum.TryParse<UserRole>(role, true, out var userRole))
+            {
+                return Unauthorized("You Don't have access.");
+            }
+
+            var result = await _cityService.GetCardDetails(claimUserId.GetValueOrDefault(), userRole);
+            return Ok(result);
+        }
     }
 }

@@ -5,6 +5,7 @@ using COPPlatform.Data;
 using COPPlatform.Dtos.AssessmentDto;
 using COPPlatform.Dtos.CityDto;
 using COPPlatform.Dtos.CommonDto;
+using COPPlatform.Dtos.dashboard;
 using COPPlatform.IServices;
 using COPPlatform.Models;
 using ClosedXML.Excel;
@@ -338,7 +339,7 @@ namespace COPPlatform.Services
             var scores = await _commonService.GetCitiesProgressAsync(request.UserId.GetValueOrDefault(),(int)role, year);
 
             var scoreMap = scores
-                .GroupBy(x => x.CityID)
+                .GroupBy(x => x.UserAssessmentMappingID)
                 .ToDictionary(
                     g => g.Key,
                     g => g.Average(x => (decimal?)x.ScoreProgress) ?? 0);
@@ -384,7 +385,7 @@ namespace COPPlatform.Services
                     var scores = await _commonService.GetCitiesProgressAsync(userId, (int)userRole, year);
 
                     var scoreMap = scores
-                        .GroupBy(x => x.CityID)
+                        .GroupBy(x => x.UserAssessmentMappingID)
                         .ToDictionary(
                             g => g.Key,
                             g => g.Average(x => (decimal?)x.ScoreProgress) ?? 0);
@@ -691,7 +692,7 @@ namespace COPPlatform.Services
                 var citySubmission = cityRaw
                     .Select(g =>
                     {
-                        var allPillars = manualAssessmentList.Where(x => x.CityID == g.CityID);
+                        var allPillars = manualAssessmentList.Where(x => x.UserAssessmentMappingID == g.CityID);
 
                         var manualScore = allPillars.Any()? allPillars.Average(x => x?.ScoreProgress ?? 0): 0;
 
@@ -1044,6 +1045,159 @@ namespace COPPlatform.Services
                 }
             }
         }
+
+        public async Task<ResultResponseDto<CardDetailsDto>> GetCardDetails(int userID, UserRole userRole)
+        {
+            try
+            {
+                var result = new CardDetailsDto();
+
+                Expression<Func<UserAssessmentMapping, bool>> predicate;
+
+                if (userRole == UserRole.Analyst)
+                    predicate = x => !x.IsDeleted && x.IsActive && x.UserID == userID;
+                else if (userRole == UserRole.Evaluator)
+                    predicate = x => !x.IsDeleted && x.IsActive &&
+                                     x.UserPillarMappings.Any(up => up.UserID == userID);
+                else
+                    predicate = x => !x.IsDeleted;
+
+                // STEP 1: Fetch data (safe LEFT JOIN)
+                var data = await (
+                    from uc in _context.UserAssessmentMappings.Where(predicate)
+                    join a in _context.Assessments.Where(x => x.IsActive)
+                        on uc.UserAssessmentMappingID equals a.UserAssessmentMappingID into gj
+                    from a in gj.DefaultIfEmpty()
+                    select new
+                    {
+                        uc.UserAssessmentMappingID,
+
+                        PillarAssessments = a.PillarAssessments
+                            .Where(pa => !pa.IsDeleted)
+                            .Select(pa => new
+                            {
+                                pa.PillarID,
+                                Responses = pa.Responses
+                                    .Where(r => !r.IsDeleted)
+                                    .Select(r => r.Score)
+                            })
+                    }
+                ).ToListAsync();
+
+                // STEP 2: Total Questions
+                var pillars = await _context.Pillars
+                    .Select(p => new 
+                    { 
+                        p.PillarID,
+                        p.PillarName,
+                        Questions = p.Questions.Where(x=>!x.IsDeleted).Count() 
+                    })
+                    .ToListAsync();
+
+                var totalQuestions = pillars.Select(x=>x.Questions).Sum();
+
+
+                var assessmentScores = new List<decimal>();
+                var pillarScores = new List<PillarCardDetailsDto>();
+
+                // STEP 3: Calculate scores
+                foreach (var item in data)
+                {
+                    var allResponses = item.PillarAssessments
+                        .SelectMany(p => p.Responses)
+                        .Select(x=>((int?)x) ?? 0 )
+                        .ToList();
+
+                    var totalAnswers = allResponses.Count;
+                    var totalScore = allResponses.Sum();
+
+                    if (totalAnswers > 0)
+                    {
+                        var assessmentScore = (totalScore * 100m) / (totalAnswers * 4m);
+                        assessmentScores.Add(assessmentScore);
+                    }
+
+                    // Pillar-level score
+                    foreach (var pillar in item.PillarAssessments)
+                    {
+                        var pResponses = pillar.Responses.ToList();
+                        var pTotalAnswers = pResponses.Count;
+                        var pTotalScore = pResponses.Sum(x=>(int?)x ?? 0);
+
+                        if (pTotalAnswers > 0)
+                        {
+                            var pScore = (pTotalScore * 100m) / (pTotalAnswers * 4m);
+
+                            var p = new PillarCardDetailsDto
+                            {
+                                PillarID = pillar.PillarID,
+                                Value = Math.Round(pScore, 2),
+                            };
+                            pillarScores.Add(p);
+                        }
+                    }
+                }
+
+                // STEP 4: Assessment counts
+                result.TotalAssessments = data.Count;
+
+                result.TotalCompletedAssessments = data.Count(x =>
+                    x.PillarAssessments.SelectMany(p => p.Responses).Count() == totalQuestions);
+
+                result.TotalInProgressAssessments =
+                    result.TotalAssessments - result.TotalCompletedAssessments;
+
+                // STEP 5: Score Aggregation
+                if (pillarScores.Any())
+                {
+                    var pillarIdToName = pillars.ToDictionary(p => p.PillarID, p => p.PillarName);
+                    
+
+                    result.AveragePillarScore = pillarScores.Any()? pillarScores.Average(x => x.Value) : 0;
+
+                    var maxPillar = pillarScores.OrderByDescending(x => x.Value).First();
+                    result.HighestPillarScore = new PillarCardDetailsDto
+                    {
+                        PillarID = maxPillar.PillarID,
+                        PillarName = pillarIdToName.ContainsKey(maxPillar.PillarID) ? pillarIdToName[maxPillar.PillarID] : "Unknown",
+                        Value = maxPillar.Value
+                    };
+
+                    var minPillar = pillarScores.OrderBy(x => x.Value).First();
+                    result.LowestPillarScore = new PillarCardDetailsDto
+                    {
+                        PillarID = minPillar.PillarID,
+                        PillarName = pillarIdToName.ContainsKey(minPillar.PillarID) ? pillarIdToName[minPillar.PillarID] : "Unknown",
+                        Value = minPillar.Value
+                    };
+                }
+                
+
+                // STEP 6: User counts (Admin only)
+                if (userRole == UserRole.Admin)
+                {
+                    var userCounts = await _context.Users
+                        .Where(u => !u.IsDeleted)
+                        .GroupBy(u => u.Role)
+                        .Select(g => new { Role = g.Key, Count = g.Count() })
+                        .ToListAsync();
+
+                    result.TotalExecutives = userCounts.FirstOrDefault(x => x.Role == UserRole.Executive)?.Count ?? 0;
+                    result.TotalAnalysts = userCounts.FirstOrDefault(x => x.Role == UserRole.Analyst)?.Count ?? 0;
+                    result.TotalEvaluators = userCounts.FirstOrDefault(x => x.Role == UserRole.Evaluator)?.Count ?? 0;
+                }
+
+                return ResultResponseDto<CardDetailsDto>.Success(result,
+                    new List<string> { "Card details fetched successfully" });
+            }
+            catch (Exception ex)
+            {
+                await _appLogger.LogAsync("Error occurred in GetCardDetails", ex);
+                return ResultResponseDto<CardDetailsDto>.Failure(
+                    new[] { "There was an error. Please try again later." });
+            }
+        }
+
         #endregion
     }
 }

@@ -275,8 +275,8 @@ namespace COPPlatform.Services
             try
             {
                 var pillarMappings = await _context.UserPillarMappings
-                    .Include(u=>u.Pillar)
-                    .Where(x => x.UserAssessmentMappingID == request.UserAssessmentMappingID 
+                    .Include(u => u.Pillar)
+                    .Where(x => x.UserAssessmentMappingID == request.UserAssessmentMappingID && !x.UserAssessmentMapping.IsDeleted
                     && (x.UserID == userId || (userRole == UserRole.Admin && x.AssignedByUserId == userId))
                     && !x.IsDeleted && x.IsActive).ToListAsync();
 

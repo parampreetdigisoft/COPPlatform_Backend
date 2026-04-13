@@ -2,10 +2,9 @@
 {
     public class AiCityPillarDashboardResponseDto
     {
-        public int CityID { get; set; }
-        public string CityName { get; set; }
-        public decimal EvaluationValue { get; set; }
-        public decimal AiValue { get; set; }
+        public int UserAssessmentMappingID { get; set; }
+        public string GeographicReference { get; set; }
+        public decimal ScoreProgress { get; set; }
         public List<CityPillarDashboardPillarValueDto> Pillars { get; set; } = new List<CityPillarDashboardPillarValueDto>();
     }
 
@@ -14,7 +13,11 @@
         public int PillarID { get; set; }
         public string PillarName { get; set; }
         public int DisplayOrder { get; set; }
-        public decimal EvaluationValue { get; set; }
-        public decimal AiValue { get; set; }
+        public int TotalScore { get; set; }
+        public int TotalAns { get; set; }
+        public int TotalQuestions { get; set; }
+        public decimal ScoreProgress { get; set; }
+        public decimal CompletionRate { get; set; }
+
     }
 }

@@ -24,5 +24,6 @@ namespace COPPlatform.IServices
         Task<ResultResponseDto<AiCityPillarDashboardResponseDto>> GetCityPillarHistory(UserCityDashBoardRequstDto userCityRequstDto,int userID, UserRole userRole);
         Task<ResultResponseDto<List<GetAssignedAssessmentResponseDto>>> GetAssignedAssessments(int userID, UserRole userRole);
         Task<ResultResponseDto<List<GetAssignedAssessmentResponseDto>>> GetAssignedInvitations(int userID, UserRole userRole);
+        Task<ResultResponseDto<AiCityPillarDashboardResponseDto>> GetDashboardPillarHistory(UserDashBoardRequstDto request, int userId, UserRole userRole);
     }
 } 

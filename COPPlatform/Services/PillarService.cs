@@ -1,4 +1,6 @@
+using ClosedXML.Excel;
 using COPPlatform.Backgroundjob;
+using COPPlatform.Common.Interface;
 using COPPlatform.Common.Models;
 using COPPlatform.Data;
 using COPPlatform.Dtos.AssessmentDto;
@@ -6,7 +8,6 @@ using COPPlatform.Dtos.CommonDto;
 using COPPlatform.Dtos.PillarDto;
 using COPPlatform.IServices;
 using COPPlatform.Models;
-using ClosedXML.Excel;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
 
@@ -17,11 +18,13 @@ namespace COPPlatform.Services
         private readonly ApplicationDbContext _context;
         private readonly IAppLogger _appLogger;
         private readonly Download _download;
-        public PillarService(ApplicationDbContext context, IAppLogger appLogger, Download download)
+        private readonly ICommonService _commonService;
+        public PillarService(ApplicationDbContext context, IAppLogger appLogger, Download download, ICommonService commonService)
         {
             _context = context;
             _appLogger = appLogger;
             _download = download;
+            _commonService = commonService;
         }
 
         public async Task<List<Pillar>> GetAllAsync()
@@ -77,7 +80,7 @@ namespace COPPlatform.Services
 
                 if(existing.IsLocked != pillar.IsLocked)
                 {
-                    var pillars = _context.UserPillarMappings.Where(x => x.PillarID == id);
+                    var pillars = _context.UserPillarMappings.Where(x => x.PillarID == id && !x.IsDeleted);
 
                     foreach (var p in pillars)
                     {
@@ -387,125 +390,88 @@ namespace COPPlatform.Services
             }
         }
 
-        public async Task<PaginationResponse<PillarsHistroyResponseDto>> GetResponsesByUserId(GetPillarResponseHistoryRequestNewDto request, UserRole userRole)
+        public async Task<ResultResponseDto<List<PillarsHistroyResponseDto>>> GetResponsesByUserId(
+            GetPillarResponseHistoryRequestNewDto request,
+            int userId,
+            UserRole userRole)
         {
             try
             {
-                var year = request.UpdatedAt.Year;
-                var startDate = new DateTime(year, 1, 1);
-                var endDate = new DateTime(year + 1, 1, 1);
-                // Role based filter
-                IQueryable<UserAssessmentMapping> userCityMappings = _context.UserAssessmentMappings
-                    .AsNoTracking()
-                    .Where(x => !x.IsDeleted && x.CityID == request.CityID);
+                var history = await _commonService
+                    .GetUserProgressByAssessmentId(request.UserAssessmentMappingID);
 
-                userCityMappings = userRole switch
+                if (!history.Any())
                 {
-                    UserRole.Analyst => userCityMappings.Where(x => x.AssignedByUserId == request.UserId),
-                    UserRole.Evaluator => userCityMappings.Where(x => x.UserID == request.UserId),
-                    _ => userCityMappings
-                };
-
-                // Main query (single DB round-trip)
-                var rawData = await (
-                    from ucm in userCityMappings
-                    join a in _context.Assessments on ucm.UserAssessmentMappingID equals a.UserAssessmentMappingID
-                    where a.IsActive && (a.UpdatedAt >= startDate && a.UpdatedAt <= endDate && (a.AssessmentPhase == AssessmentPhase.Completed || a.AssessmentPhase == AssessmentPhase.EditRejected || a.AssessmentPhase == AssessmentPhase.EditRequested))
-                    from pa in a.PillarAssessments
-                    where !request.PillarID.HasValue || pa.PillarID == request.PillarID
-                    join p in _context.Pillars on pa.PillarID equals p.PillarID
-                    select new
-                    {
-                        p.PillarID,
-                        p.PillarName,
-                        p.DisplayOrder,
-                        UserID = ucm.UserID,
-                        TotalQuestion = p.Questions.Count(),
-                        Responses = pa.Responses
-                    }
-                ).ToListAsync();
-
-                if (!rawData.Any())
-                    return new PaginationResponse<PillarsHistroyResponseDto>();
-
-                // Preload users
-                var userIds = rawData.Select(x => x.UserID).Distinct().ToList();
-                var usersDict = await _context.Users
-                    .Where(u => userIds.Contains(u.UserID))
-                    .ToDictionaryAsync(u => u.UserID, u => u.FullName);
-
-                var result = rawData
-                .GroupBy(x => new { x.PillarID, x.PillarName, x.DisplayOrder })
-                .Select(pillarGroup =>
-                {
-                    return new PillarsHistroyResponseDto
-                    {
-                        PillarID = pillarGroup.Key.PillarID,
-                        PillarName = pillarGroup.Key.PillarName,
-                        DisplayOrder = pillarGroup.Key.DisplayOrder,
-                        Users = pillarGroup
-                        .GroupBy(x => x.UserID)
-                        .Select(userGroup =>
-                        {
-                            var responses = userGroup
-                                .SelectMany(x => x.Responses)
-                                .Where(r => r.Score.HasValue &&
-                                            (int)r.Score.Value <= (int)ScoreValue.Four)
-                                .ToList();
-
-                            var score = responses.Sum(r => (int?)r.Score ?? 0);
-                            var scoreCount = responses.Count;
-                            var totalQuestions = userGroup.Max(x => x.TotalQuestion);
-
-                            decimal progress = scoreCount > 0
-                                ? score * 100m / (scoreCount * 4m)
-                                : 0m;
-
-                            return new PillarsUserHistroyResponseDto
-                            {
-                                UserID = userGroup.Key,
-                                FullName = usersDict.GetValueOrDefault(userGroup.Key, ""),
-                                Score = score,
-                                ScoreProgress = progress,
-                                TotalQuestion = totalQuestions,
-                                AnsQuestion = responses.Count,
-                                AnsPillar = responses.Any() ? 1 : 0
-                            };
-
-                        }).ToList()
-                    };
-                }).OrderBy(x => x.DisplayOrder);
-
-                var count = 0;
-                var valid = 0;
-                var totalRecords = 0;
-
-                foreach (var r in result)
-                {
-                    totalRecords += r.Users.Count;
-                    if (count+ r.Users.Count <= request.PageSize)
-                    {
-                        count += r.Users.Count;
-                        valid++;
-                    }
+                    return ResultResponseDto<List<PillarsHistroyResponseDto>>
+                        .Failure(new List<string> { "No data found for the given user and assessment." });
                 }
-                var filterResult = result.Skip((request.PageNumber - 1) * valid);
 
-                return new PaginationResponse<PillarsHistroyResponseDto>
-                {
-                    Data = filterResult.Take(valid),
-                    TotalRecords = totalRecords,
-                    PageNumber = request.PageNumber,
-                    PageSize = request.PageSize
-                };
+                // Step 1: Get user pillars (DB query only once)
+                var userPillars = await _context.UserPillarMappings
+                    .Where(x => x.UserAssessmentMappingID == request.UserAssessmentMappingID &&
+                               (x.UserID == userId ||
+                               ((userRole == UserRole.Admin || userRole == UserRole.Executive) && x.User.Role == UserRole.Analyst))
+                               && !x.IsDeleted && x.IsActive
+                               )
+                    .Select(x => new
+                    {
+                        x.PillarID,
+                        x.Pillar.PillarName,
+                        x.Pillar.DisplayOrder
+                    })
+                    .ToListAsync();
 
+                // Step 2: Group history in memory (fast lookup)
+                var groupedHistory = history
+                    .GroupBy(x => x.PillarID)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => new PillarsHistroyResponseDto
+                        {
+                            PillarID = g.Key,
+                            PillarName = g.First().PillarName,
+                            DisplayOrder = g.First().DisplayOrder,
+                            UserAssessmentMappingID = request.UserAssessmentMappingID,
+                            Users = g.GroupBy(u => u.SubmittedByUserID)
+                                     .Select(ug =>
+                                     {
+                                         var first = ug.First();
+                                         return new PillarsUserHistroyResponseDto
+                                         {
+                                             UserID = ug.Key,
+                                             FullName = first.SubmittedByUserName ?? "",
+                                             ScoreProgress = first.ScoreProgress,
+                                             TotalQuestion = first.TotalQuestions,
+                                             AnsQuestion = first.TotalAns,
+                                             CompeletionRate = first.CompletionRate
+                                         };
+                                     }).OrderBy(x=>x.UserID).ToList()
+                        });
+
+                // Step 3: Merge (Left Join equivalent, but cleaner)
+                var result = userPillars    
+                    .Select(p => groupedHistory.TryGetValue(p.PillarID, out var historyData)
+                        ? historyData
+                        : new PillarsHistroyResponseDto
+                        {
+                            PillarID = p.PillarID,
+                            PillarName = p.PillarName,
+                            DisplayOrder = p.DisplayOrder,
+                            UserAssessmentMappingID = request.UserAssessmentMappingID,
+                            Users = new List<PillarsUserHistroyResponseDto>()
+                        })
+                    .OrderBy(x => x.DisplayOrder)
+                    .ToList();
+
+                return ResultResponseDto<List<PillarsHistroyResponseDto>>
+                    .Success(result, new List<string> { "Result found successfully." });
             }
             catch (Exception ex)
             {
-                await _appLogger.LogAsync(
-                    "Error occurred in GetPillarsHistoryByUserId", ex);
+                await _appLogger.LogAsync("Error occurred in GetPillarsHistoryByUserId", ex);
 
-                return new PaginationResponse<PillarsHistroyResponseDto>();
+                return ResultResponseDto<List<PillarsHistroyResponseDto>>
+                    .Failure(new List<string> { "Something went wrong while fetching data." });
             }
         }
     }
