@@ -130,9 +130,22 @@ namespace COPPlatform.Controllers
 
         [HttpGet("getQuestionsHistoryByPillar")]
         [Authorize]
-        public async Task<IActionResult> GetQuestionsHistoryByPillar([FromQuery] GetCityPillarHistoryRequestDto requestDto)
+        public async Task<IActionResult> GetQuestionsHistoryByPillar([FromQuery] GetQuesiontAssessmentHistoryRequestDto requestDto)
         {
-            var content = await _questionService.GetQuestionsHistoryByPillar(requestDto);
+            var userId = GetUserIdFromClaims();
+            if (userId == null)
+                return Unauthorized("User ID not found in token.");
+
+            var role = GetRoleFromClaims();
+            if (role == null)
+                return Unauthorized("You Don't have access.");
+
+            if (!Enum.TryParse<UserRole>(role, true, out var userRole))
+            {
+                return Unauthorized("You Don't have access.");
+            }
+
+            var content = await _questionService.GetQuestionsHistoryByPillar(requestDto, userId.GetValueOrDefault(), userRole);
 
             return Ok(content);
         }

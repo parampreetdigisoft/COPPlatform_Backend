@@ -64,4 +64,10 @@ namespace COPPlatform.Dtos.AssessmentDto
     {
         public int UserAssessmentMappingID { get; set; }
     }
+    public class GetQuesiontAssessmentHistoryRequestDto
+    {
+        public int UserAssessmentMappingID { get; set; }
+        public int PillarID { get; set; }
+    }
+
 }

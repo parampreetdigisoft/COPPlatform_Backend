@@ -892,66 +892,56 @@ namespace COPPlatform.Services
 
             return safeName;
         }
-        public async Task<ResultResponseDto<List<QuestionsByUserPillarsResponsetDto>>> GetQuestionsHistoryByPillar(GetCityPillarHistoryRequestDto requestDto)
+        public async Task<ResultResponseDto<List<QuestionsByUserPillarsResponsetDto>>> GetQuestionsHistoryByPillar(GetQuesiontAssessmentHistoryRequestDto requestDto, int userId, UserRole userRole)
         {
             try
             {
-                var user = await _context.Users
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(x => x.UserID == requestDto.UserID);
-
-                if (!requestDto.PillarID.HasValue || user == null)
-                {
-                    return ResultResponseDto<List<QuestionsByUserPillarsResponsetDto>>.Failure(new[] { "Invalid request" });
-                }
-
-                // Fetch pillar + questions
                 var pillar = await _context.Pillars
                     .Include(x => x.Questions)
                     .ThenInclude(x=>x.QuestionOptions)
                     .AsNoTracking()
-                    .FirstOrDefaultAsync(x => x.PillarID == requestDto.PillarID.Value);
+                    .FirstOrDefaultAsync(x => x.PillarID == requestDto.PillarID);
 
                 if (pillar == null)
                 {
                     return ResultResponseDto<List<QuestionsByUserPillarsResponsetDto>>.Failure(new[] { "Pillar not found" });
                 }
 
-                // User mappings (admins can see all in city)
-                var userMappings = await _context.UserAssessmentMappings
-                    .Where(x => x.CityID == requestDto.CityID
-                                && !x.IsDeleted
-                                && (x.AssignedByUserId == requestDto.UserID || user.Role == UserRole.Admin))
-                    .AsNoTracking()
-                    .ToListAsync();
-
-                var mappingIds = userMappings.Select(x => x.UserAssessmentMappingID).ToList();
-
+  
                 var assessments = await _context.Assessments
                     .Include(x=>x.UserAssessmentMapping)
                     .Include(a => a.PillarAssessments
-                        .Where(pa => pa.PillarID == requestDto.PillarID)) // allowed
-                    .ThenInclude(pa => pa.Responses) // proper navigation include
-                    .Where(a => mappingIds.Contains(a.UserAssessmentMappingID) && a.IsActive && a.UpdatedAt.Year == requestDto.UpdatedAt.Year)
+                        .Where(pa => pa.PillarID == requestDto.PillarID)) 
+                    .ThenInclude(pa => pa.Responses) 
+                    .Where(a => a.UserAssessmentMappingID == requestDto.UserAssessmentMappingID && a.IsActive)
                     .AsNoTracking()
                     .ToListAsync();
 
-                var userIds = assessments.Select(x => x.UserAssessmentMapping.UserID);
+                var userIds = assessments.SelectMany(x => x.PillarAssessments)
+                    .Where(pa => pa.PillarID == requestDto.PillarID)
+                    .SelectMany(x=>x.Responses)
+                    .Select(x=>x.UpdatedBy)
+                    .Distinct()
+                    .ToList();
+
                 // Fetch users dictionary
                 var users = await _context.Users
                     .Where(x => userIds.Contains(x.UserID))
                     .AsNoTracking()
+                    .OrderBy(x=>x.UserID)
                     .ToDictionaryAsync(x => x.UserID);
 
                 // Build responses by user
                 var responsesByUser = assessments
-                    .GroupBy(a => a.UserAssessmentMapping.UserID)
+                    .SelectMany(a => a.PillarAssessments)
+                    .Where(pa => pa.PillarID == requestDto.PillarID && !pa.IsDeleted)
+                    .SelectMany(pa => pa.Responses)
+                    .Where(x=>!x.IsDeleted)
+                    .OrderBy(x=>x.UpdatedBy)
+                    .GroupBy(a => a.UpdatedBy)
                     .ToDictionary(
                         g => g.Key,
-                        g => g.SelectMany(a => a.PillarAssessments)
-                              .Where(pa => pa.PillarID == requestDto.PillarID)
-                              .SelectMany(pa => pa.Responses)
-                              .ToDictionary(r => r.QuestionID)
+                        g => g.ToDictionary(r => r.QuestionID)
                     );
 
                 // Build final DTO list
