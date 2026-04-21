@@ -34,7 +34,7 @@ namespace COPPlatform.Services
             }
         }
 
-        public async Task<PaginationResponse<GetQuestionRespones>> GetQuestionsAsync(GetQuestionRequestDto request)
+        public async Task<PaginationResponse<GetQuestionResponse>> GetQuestionsAsync(GetQuestionRequestDto request)
         {
             try
             {
@@ -44,7 +44,7 @@ namespace COPPlatform.Services
                     .Include(o => o.QuestionOptions)
                 where !q.IsDeleted
                    && (!request.PillarID.HasValue || q.PillarID == request.PillarID.Value)
-                select new GetQuestionRespones
+                select new GetQuestionResponse
                 {
                     QuestionID = q.QuestionID,
                     QuestionText = q.QuestionText,
@@ -62,7 +62,7 @@ namespace COPPlatform.Services
             catch (Exception ex)
             {
                 await _appLogger.LogAsync("Error Occure in GetQuestionsAsync", ex);
-                return new PaginationResponse<GetQuestionRespones>();
+                return new PaginationResponse<GetQuestionResponse>();
             }
         }
 
@@ -270,7 +270,7 @@ namespace COPPlatform.Services
                 return ResultResponseDto<string>.Failure(new string[] { "There is an error please try later" });
             }
         }
-        public async Task<ResultResponseDto<GetPillarQuestionByCityRespones>> GetQuestionsByAssessmentMappingId(CityPillerRequestDto request, int userId, UserRole userRole)
+        public async Task<ResultResponseDto<GetPillarQuestionByCityResponse>> GetQuestionsByAssessmentMappingId(CityPillerRequestDto request, int userId, UserRole userRole)
         {
             try
             {
@@ -318,7 +318,7 @@ namespace COPPlatform.Services
 
                     if (selectPillar == null || selectPillar?.Questions == null)
                     {
-                        return ResultResponseDto<GetPillarQuestionByCityRespones>.Failure(new[] { "You have submitted assessment for this city" });
+                        return ResultResponseDto<GetPillarQuestionByCityResponse>.Failure(new[] { "You have submitted assessment for this city" });
                     }
 
                     var editAssessmentResponse = new Dictionary<int, AssessmentResponse>();
@@ -343,6 +343,7 @@ namespace COPPlatform.Services
                             QuestionID = q.QuestionID,
                             QuestionText = q.QuestionText,
                             PillarID = q.PillarID,
+                            IsCritical = q.IsCritical,
                             ResponseID = submittedQuestion.ResponseID,
                             IsSelected = submittedQuestion.QuestionID == q.QuestionID,
                             History = submittedQuestion.AssessmentResponseHistories.Select(x=> new HistoryQuestionAnswerRawDto {
@@ -394,7 +395,7 @@ namespace COPPlatform.Services
                       
                     }
 
-                    var result = new GetPillarQuestionByCityRespones
+                    var result = new GetPillarQuestionByCityResponse
                     {
                         AssessmentID = assessment?.AssessmentID ?? 0,
                         UserAssessmentMappingID = request.UserAssessmentMappingID,
@@ -413,7 +414,7 @@ namespace COPPlatform.Services
                             ImagePath = x.Pillar.ImagePath
                         }).OrderBy(x=>x.DisplayOrder).ToList()
                     };
-                    return ResultResponseDto<GetPillarQuestionByCityRespones>.Success(result, new[] { "get questions successfully" });
+                    return ResultResponseDto<GetPillarQuestionByCityResponse>.Success(result, new[] { "get questions successfully" });
                 }
                 return null;
 
@@ -421,7 +422,7 @@ namespace COPPlatform.Services
             catch (Exception ex)
             {
                 await _appLogger.LogAsync("Error Occure in GetQuestionsByCityIdAsync", ex);
-                return ResultResponseDto<GetPillarQuestionByCityRespones>.Failure(new string[] { "There is an error please try later" });
+                return ResultResponseDto<GetPillarQuestionByCityResponse>.Failure(new string[] { "There is an error please try later" });
             }
         }
         public async Task<Tuple<string, byte[]>> ExportAssessment(int UserAssessmentMappingID, int userId, UserRole userRole)
@@ -892,7 +893,7 @@ namespace COPPlatform.Services
 
             return safeName;
         }
-        public async Task<ResultResponseDto<List<QuestionsByUserPillarsResponsetDto>>> GetQuestionsHistoryByPillar(GetQuesiontAssessmentHistoryRequestDto requestDto, int userId, UserRole userRole)
+        public async Task<ResultResponseDto<List<QuestionsByUserPillarsResponseDto>>> GetQuestionsHistoryByPillar(GetQuesiontAssessmentHistoryRequestDto requestDto, int userId, UserRole userRole)
         {
             try
             {
@@ -904,7 +905,7 @@ namespace COPPlatform.Services
 
                 if (pillar == null)
                 {
-                    return ResultResponseDto<List<QuestionsByUserPillarsResponsetDto>>.Failure(new[] { "Pillar not found" });
+                    return ResultResponseDto<List<QuestionsByUserPillarsResponseDto>>.Failure(new[] { "Pillar not found" });
                 }
 
   
@@ -969,7 +970,7 @@ namespace COPPlatform.Services
                             };
                         }).ToList();
 
-                        return new QuestionsByUserPillarsResponsetDto
+                        return new QuestionsByUserPillarsResponseDto
                         {
                             QuestionID = q.QuestionID,
                             PillarID = q.PillarID,
@@ -980,7 +981,7 @@ namespace COPPlatform.Services
                     })
                     .ToList();
 
-                return ResultResponseDto<List<QuestionsByUserPillarsResponsetDto>>.Success(
+                return ResultResponseDto<List<QuestionsByUserPillarsResponseDto>>.Success(
                     pillarResponses,
                     Array.Empty<string>() // no error message on success
                 );
@@ -988,7 +989,7 @@ namespace COPPlatform.Services
             catch (Exception ex)
             {
                 await _appLogger.LogAsync("Error occurred in GetQuestionsHistoryByPillar", ex);
-                return ResultResponseDto<List<QuestionsByUserPillarsResponsetDto>>.Failure(new[] { "There was an error, please try again later" });
+                return ResultResponseDto<List<QuestionsByUserPillarsResponseDto>>.Failure(new[] { "There was an error, please try again later" });
             }
         }
 

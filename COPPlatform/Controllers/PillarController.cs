@@ -110,5 +110,26 @@ namespace COPPlatform.Controllers
             var response = await _pillarService.GetResponsesByUserId(requestDto, claimUserId.GetValueOrDefault(), userRole);
             return Ok(response);
         }
+
+        [HttpPost("GetResponsesByUserIdWeekly")]
+        public async Task<IActionResult> GetResponsesByUserIdWeekly([FromBody] GetPillarResponseHistoryRequestNewDto? requestDto)
+        {
+            var claimUserId = GetUserIdFromClaims();
+            if (claimUserId == null)
+                return Unauthorized("User ID not found.");
+
+            var role = GetRoleFromClaims();
+            if (role == null)
+                return Unauthorized("You Don't have access.");
+
+            if (!Enum.TryParse<UserRole>(role, true, out var userRole))
+            {
+                return Unauthorized("You Don't have access.");
+            }
+
+            requestDto.UserId = claimUserId;
+            var response = await _pillarService.GetResponsesByUserIdWeekly(requestDto, claimUserId.GetValueOrDefault(), userRole);
+            return Ok(response);
+        }
     }
 } 

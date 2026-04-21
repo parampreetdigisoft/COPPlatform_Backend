@@ -1,9 +1,10 @@
-using ClosedXML.Excel;
+﻿using ClosedXML.Excel;
 using COPPlatform.Backgroundjob;
 using COPPlatform.Common.Interface;
 using COPPlatform.Common.Models;
 using COPPlatform.Data;
 using COPPlatform.Dtos.AssessmentDto;
+using COPPlatform.Dtos.CityDto;
 using COPPlatform.Dtos.CommonDto;
 using COPPlatform.Dtos.PillarDto;
 using COPPlatform.IServices;
@@ -471,6 +472,103 @@ namespace COPPlatform.Services
                 await _appLogger.LogAsync("Error occurred in GetPillarsHistoryByUserId", ex);
 
                 return ResultResponseDto<List<PillarsHistroyResponseDto>>
+                    .Failure(new List<string> { "Something went wrong while fetching data." });
+            }
+        }
+
+        public async Task<ResultResponseDto<WeeklyPillarsHistoryResponseDto>> GetResponsesByUserIdWeekly( GetPillarResponseHistoryRequestNewDto request,
+        int userId, UserRole userRole)
+        {
+            try
+            {
+                var history = await _commonService
+                    .GetUserProgressByAssessmentIdWeekly(request.UserAssessmentMappingID, request.Week1StartDate, request.Week1EndDate
+                    , request.Week2StartDate, request.Week2EndDate);
+
+                if (!history.Any())
+                {
+                    return ResultResponseDto<WeeklyPillarsHistoryResponseDto>
+                        .Failure(new List<string> { "No data found for the given user and assessment." });
+                }
+
+                // Step 1: Get user pillars
+                var userPillars = await _context.UserPillarMappings
+                    .Where(x => x.UserAssessmentMappingID == request.UserAssessmentMappingID &&
+                               (x.UserID == userId ||
+                               ((userRole == UserRole.Admin || userRole == UserRole.Executive) && x.User.Role == UserRole.Analyst))
+                               && !x.IsDeleted && x.IsActive)
+                    .Select(x => new
+                    {
+                        x.PillarID,
+                        x.Pillar.PillarName,
+                        x.Pillar.DisplayOrder
+                    })
+                    .ToListAsync();
+
+                // 🔥 Split by week
+                var week1Data = history.Where(x => x.WeekType == "Week1").ToList();
+                var week2Data = history.Where(x => x.WeekType == "Week2").ToList();
+
+                // 🔁 Reusable function (your same logic)
+                List<PillarsHistroyResponseDto> BuildResult(List<UserEvaluationPillarProgressResultDto> data)
+                {
+                    var groupedHistory = data
+                        .GroupBy(x => x.PillarID)
+                        .ToDictionary(
+                            g => g.Key,
+                            g => new PillarsHistroyResponseDto
+                            {
+                                PillarID = g.Key,
+                                PillarName = g.First().PillarName,
+                                DisplayOrder = g.First().DisplayOrder,
+                                UserAssessmentMappingID = request.UserAssessmentMappingID,
+                                Users = g.GroupBy(u => u.SubmittedByUserID)
+                                         .Select(ug =>
+                                         {
+                                             var first = ug.First();
+                                             return new PillarsUserHistroyResponseDto
+                                             {
+                                                 UserID = ug.Key,
+                                                 FullName = first.SubmittedByUserName ?? "",
+                                                 ScoreProgress = first.ScoreProgress,
+                                                 TotalQuestion = first.TotalQuestions,
+                                                 AnsQuestion = first.TotalAns,
+                                                 CompeletionRate = first.CompletionRate
+                                             };
+                                         })
+                                         .OrderBy(x => x.UserID)
+                                         .ToList()
+                            });
+
+                    return userPillars
+                        .Select(p => groupedHistory.TryGetValue(p.PillarID, out var historyData)
+                            ? historyData
+                            : new PillarsHistroyResponseDto
+                            {
+                                PillarID = p.PillarID,
+                                PillarName = p.PillarName,
+                                DisplayOrder = p.DisplayOrder,
+                                UserAssessmentMappingID = request.UserAssessmentMappingID,
+                                Users = new List<PillarsUserHistroyResponseDto>()
+                            })
+                        .OrderBy(x => x.DisplayOrder)
+                        .ToList();
+                }
+               
+                var response = new WeeklyPillarsHistoryResponseDto
+                {                   
+                    Week1 = BuildResult(week1Data),
+                    Week2 = BuildResult(week2Data)
+                };                
+
+                return ResultResponseDto<WeeklyPillarsHistoryResponseDto>
+                    .Success(response, new List<string> { "Result found successfully." });
+            }
+            catch (Exception ex)
+            {
+                await _appLogger.LogAsync("Error occurred in GetPillarsHistoryByUserId", ex);
+
+                return ResultResponseDto<WeeklyPillarsHistoryResponseDto>
                     .Failure(new List<string> { "Something went wrong while fetching data." });
             }
         }

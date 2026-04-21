@@ -155,8 +155,8 @@ namespace COPPlatform.Services
                     }
 
                     var existingResponses = pillarAssessment.Responses.ToList();
-                    
-                   
+
+
                     // ADD or UPDATE responses
                     foreach (var response in request.Responses)
                     {
@@ -330,7 +330,7 @@ namespace COPPlatform.Services
             }
         }
 
-        public async Task<PaginationResponse<GetAssessmentQuestionResponseDto>> GetAssessmentQuestion(GetAssessmentQuestoinRequestDto request)
+        public async Task<PaginationResponse<GetAssessmentQuestionResponseDto>> GetAssessmentQuestion(GetAssessmentQuestionRequestDto request)
         {
             try
             {
@@ -492,7 +492,7 @@ namespace COPPlatform.Services
                     }
 
                     // ── Save this pillar's responses ──────────────────
-          
+
 
                     var assessment = new AddAssessmentDto
                     {
@@ -777,7 +777,7 @@ namespace COPPlatform.Services
                         CreatedAt = currentDate,
                         UpdatedAt = currentDate,
                         IsActive = true,
-                        AssessmentPhase = transferAssessment.AssessmentPhase == AssessmentPhase.Completed ?  transferAssessment.AssessmentPhase: AssessmentPhase.InProgress,
+                        AssessmentPhase = transferAssessment.AssessmentPhase == AssessmentPhase.Completed ?transferAssessment.AssessmentPhase: AssessmentPhase.InProgress,
                         PillarAssessments = new List<PillarAssessment>()
                     };
 
@@ -908,7 +908,7 @@ namespace COPPlatform.Services
                     .Select(x => new { x.CityID, x.CityName })
                     .FirstOrDefaultAsync();
 
-                 var pillarEvaluations = pillarEvaluationsList.Where(x=>x.UserAssessmentMappingID == request.CityID);
+                var pillarEvaluations = pillarEvaluationsList.Where(x => x.UserAssessmentMappingID == request.CityID);
 
                 // 3. Map pillar results
                 var pillarResults = pillars
@@ -931,7 +931,7 @@ namespace COPPlatform.Services
                     //CityID = request.CityID,
                     //CityName = city?.CityName ?? string.Empty,
                     //AiValue = aiCityProgress ?? 0,
-                    ScoreProgress = Math.Round(pillarEvaluations.Average(x => x.ScoreProgress),2),
+                    ScoreProgress = Math.Round(pillarEvaluations.Average(x => x.ScoreProgress), 2),
                     Pillars = pillarResults
                 };
 
@@ -953,7 +953,7 @@ namespace COPPlatform.Services
                 var assessments = await _context.UserAssessmentMappings
                     .Include(x => x.UserPillarMappings)
                     .Where(x => x.UserID == userID && !x.IsDeleted && x.IsActive)
-                    .Select(x=>new GetAssignedAssessmentResponseDto
+                    .Select(x => new GetAssignedAssessmentResponseDto
                     {
                         UserAssessmentMappingID = x.UserAssessmentMappingID,
                         UserID = x.UserID,
@@ -962,8 +962,8 @@ namespace COPPlatform.Services
                         UpdatedAt = DateTime.UtcNow,
                         GeographicReference = x.GeographicReference,
 
-                        UserPillarMappings = x.UserPillarMappings.Where(x=>!x.IsDeleted && x.IsActive && x.UserID == userID)
-                        .Select(y=> new AssignedAssessmentPillarMappingDto
+                        UserPillarMappings = x.UserPillarMappings.Where(x => !x.IsDeleted && x.IsActive && x.UserID == userID)
+                        .Select(y => new AssignedAssessmentPillarMappingDto
                         {
                             UserPillarMappingID = y.UserPillarMappingID,
                             UserID = y.UserID,
@@ -974,7 +974,7 @@ namespace COPPlatform.Services
                             Description = y.Pillar.Description,
                             DisplayOrder = y.Pillar.DisplayOrder
                         }).ToList()
-                        
+
                     }).ToListAsync();
 
                 return ResultResponseDto<List<GetAssignedAssessmentResponseDto>>
@@ -1094,11 +1094,44 @@ namespace COPPlatform.Services
                 // 1. Validate city access
                 var userAssessmentMappings = await _context.UserAssessmentMappings
                     .FirstOrDefaultAsync(x =>
-                        !x.IsDeleted &&
-                        (userRole == UserRole.Admin || (x.UserAssessmentMappingID == request.UserAssessmentMappingID))
-                        );
+                        !x.IsDeleted && x.UserAssessmentMappingID == request.UserAssessmentMappingID);
+                var currentUser = await _context.Users.Where(u => u.UserID == userId) .Select(u => new { u.UserID, u.CreatedBy }).FirstOrDefaultAsync();
 
-                if (userAssessmentMappings == null)
+                var relevantUserIds = new List<int> { userId };
+
+                if (currentUser?.CreatedBy != null)
+                {
+                    relevantUserIds.Add(currentUser.CreatedBy.Value);                    
+                }
+                bool hasAccess = true;
+
+                // ✅ Skip validation if no mapping ID is provided
+                if (request.UserAssessmentMappingID.HasValue && request.UserAssessmentMappingID > 0)
+                {
+                    hasAccess = userRole switch
+                    {
+                        UserRole.Admin => true,
+
+                        // Analyst can access their own mappings
+                        UserRole.Analyst => await _context.UserAssessmentMappings
+                            .AnyAsync(x =>
+                                x.UserAssessmentMappingID == request.UserAssessmentMappingID &&
+                                x.UserID == userId &&
+                                !x.IsDeleted),
+
+                        // Evaluator can access mappings of the Analyst who created them
+                        UserRole.Evaluator => await _context.Users.AnyAsync(u => u.UserID == userId 
+                        && _context.UserAssessmentMappings.Any(x => x.UserID == u.CreatedBy &&
+                                x.UserAssessmentMappingID == request.UserAssessmentMappingID &&
+                                !x.IsDeleted
+                            )
+                        ),
+
+                        _ => false
+                    };
+                }
+
+                if (!hasAccess)
                 {
                     return ResultResponseDto<AiCityPillarDashboardResponseDto>
                         .Failure(new[] { "Unauthorized or invalid city access" });
@@ -1107,44 +1140,101 @@ namespace COPPlatform.Services
                 // 2. Fetch required data in parallel
                 var pillarEvaluationsList = await _commonService
                     .GetAssessmentProgressAsync(userId, (int)userRole);
+                if (userRole == UserRole.Evaluator)
+                {
 
-                var pillars = await _context.Pillars
-                    .AsNoTracking()
-                    .Where(x => !x.IsLocked || userRole == UserRole.Admin || userRole == UserRole.Executive)
+                    pillarEvaluationsList = pillarEvaluationsList.Where(x => relevantUserIds.Contains(x.UserID)).ToList();
+                }
+
+
+                List<int>? mappedPillarIds = null;
+
+                if (request.UserAssessmentMappingID > 0)
+                {
+                    mappedPillarIds = await _context.Assessments
+                        .Where(a => a.UserAssessmentMappingID == request.UserAssessmentMappingID && a.IsActive)
+                        .SelectMany(a => a.PillarAssessments)
+                        .Where(pa => !pa.IsDeleted)
+                        .Select(pa => pa.PillarID)
+                        .Distinct()
+                        .ToListAsync();
+                }
+                else if (userRole == UserRole.Analyst || userRole == UserRole.Evaluator)
+                {
+                    mappedPillarIds = await _context.UserPillarMappings.Where(upm => upm.UserID == userId
+                      && !upm.IsDeleted).Select(upm => upm.PillarID).Distinct().ToListAsync();
+
+                }
+                var pillarsQuery = _context.Pillars.AsNoTracking().Where(x => !x.IsLocked || userRole == UserRole.Admin || userRole == UserRole.Executive);
+
+                // 🔥 APPLY FILTER ONLY IF mapping exists
+                if (mappedPillarIds != null)
+                {
+                    pillarsQuery = pillarsQuery.Where(p => mappedPillarIds.Contains(p.PillarID));
+                }
+
+                var pillars = await pillarsQuery
                     .Select(P => new
                     {
                         P,
-                        TotalQuestions = P.Questions.Where(x=>!x.IsDeleted).Count()
+                        TotalQuestions = P.Questions.Where(x => !x.IsDeleted).Count(),
+                        TotalCriticalQuestions = P.Questions.Where(x => !x.IsDeleted && x.IsCritical).Count()
                     })
                     .OrderBy(x => x.P.DisplayOrder)
                     .ToListAsync();
+                var pillarEvaluations = pillarEvaluationsList.AsQueryable();
 
-
-                var pillarEvaluations = pillarEvaluationsList.Where(x => x.UserAssessmentMappingID == request.UserAssessmentMappingID);
-
+                if (request.UserAssessmentMappingID > 0)
+                {
+                    pillarEvaluations = pillarEvaluations
+                        .Where(x => x.UserAssessmentMappingID == request.UserAssessmentMappingID);
+                }
                 // 3. Map pillar results
                 var pillarResults = pillars
-                    .GroupJoin(
-                        pillarEvaluations,
-                        p => p.P.PillarID,
-                        e => e.PillarID,
-                        (pillar, evals) => new CityPillarDashboardPillarValueDto
-                        {
-                            PillarID = pillar.P.PillarID,
-                            PillarName = pillar.P.PillarName,
-                            DisplayOrder = pillar.P.DisplayOrder,
-                            ScoreProgress = evals.FirstOrDefault()?.ScoreProgress ?? 0,
-                            TotalAns = evals.FirstOrDefault()?.TotalAns ?? 0,
-                            TotalQuestions = pillar.TotalQuestions,
-                            CompletionRate  = evals.FirstOrDefault()?.CompletionRate ?? 0,
-                            TotalScore = evals.FirstOrDefault()?.TotalScore ?? 0
-                        })
-                    .ToList();
+                            .GroupJoin(
+                                pillarEvaluations,
+                                p => p.P.PillarID,
+                                e => e.PillarID,
+                                (pillar, evals) =>
+                                {
+                                    var totalScore = evals.Sum(x => x.TotalScore);
+                                    var totalAns = evals.Sum(x => x.TotalAns);
+                                    var totalCriticalAns = evals.Sum(x => x.TotalAnsweredCriticalQuestions);
+                                    var avgTotalCriAns = evals.Any() ? evals.Average(x => x.TotalAnsweredCriticalQuestions) : 0;
+                                    var avgTotalAns = evals.Any() ? evals.Average(x => x.TotalAns) : 0;
+
+                                    // ✅ Rounded to nearest integer
+                                    var roundedTotalAns = (int)Math.Round(avgTotalAns, MidpointRounding.AwayFromZero);
+                                    var roundedTotalCriticalAns = (int)Math.Round(avgTotalCriAns, MidpointRounding.AwayFromZero);
+                                    return new CityPillarDashboardPillarValueDto
+                                    {
+                                        PillarID = pillar.P.PillarID,
+                                        PillarName = pillar.P.PillarName,
+                                        DisplayOrder = pillar.P.DisplayOrder,
+
+                                        // ✅ SAFE calculation
+                                        ScoreProgress = totalAns == 0 ? 0 : Math.Round((totalScore * 100m) / (totalAns * 4m), 2),
+
+                                        TotalAns = roundedTotalAns, // ✅ final rounded value
+                                        TotalQuestions = pillar.TotalQuestions,
+                                        TotalCriticalQuestions = pillar.TotalCriticalQuestions,
+                                        TotalAnsweredCriticalQuestions = roundedTotalCriticalAns,
+
+                                        // ✅ FIX: avoid empty Average()
+                                        CompletionRate = evals.Any()
+                                            ? evals.Average(x => x.CompletionRate)
+                                            : 0,
+
+                                        // ✅ FIXED
+                                        TotalScore = totalScore
+                                    };
+                                })
+                            .ToList();
 
                 // 4. Prepare response
                 var response = new AiCityPillarDashboardResponseDto
                 {
-                    UserAssessmentMappingID = userAssessmentMappings.UserAssessmentMappingID,
+                    UserAssessmentMappingID = userAssessmentMappings != null ? userAssessmentMappings.UserAssessmentMappingID : null,
                     GeographicReference = userAssessmentMappings?.GeographicReference ?? string.Empty,
                     ScoreProgress = pillarEvaluations.Any() ? Math.Round(pillarEvaluations.Average(x => x.ScoreProgress), 2) : 0,
                     Pillars = pillarResults

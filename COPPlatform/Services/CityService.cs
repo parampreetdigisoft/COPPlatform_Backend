@@ -1186,9 +1186,115 @@ namespace COPPlatform.Services
                     result.TotalAnalysts = userCounts.FirstOrDefault(x => x.Role == UserRole.Analyst)?.Count ?? 0;
                     result.TotalEvaluators = userCounts.FirstOrDefault(x => x.Role == UserRole.Evaluator)?.Count ?? 0;
                 }
+                else if (userRole == UserRole.Analyst)
+                {
+                    var evaluatorCount = await _context.Users
+                        .Where(u => !u.IsDeleted &&
+                                    u.Role == UserRole.Evaluator &&
+                                    u.CreatedBy == userID)
+                        .CountAsync();
+
+                    result.TotalEvaluators = evaluatorCount;
+                }
+                // 1. Base mappings
+                var mappings = await _context.UserAssessmentMappings
+                    .Where(predicate)
+                    .Select(x => new
+                    {
+                        x.UserAssessmentMappingID,
+                        x.DueDate,
+                        x.UpdatedAt
+                    })
+                    .ToListAsync();
+
+                var mappingIds = mappings.Select(x => x.UserAssessmentMappingID).ToList();
+
+                // 2. Pillars per mapping
+                var pillarData = await _context.Assessments
+                    .Where(a => a.IsActive && mappingIds.Contains(a.UserAssessmentMappingID))
+                    .SelectMany(a => a.PillarAssessments)
+                    .Where(pa => !pa.IsDeleted)
+                    .GroupBy(pa => pa.Assessment.UserAssessmentMappingID)
+                    .Select(g => new
+                    {
+                        MappingID = g.Key,
+                        Pillars = g.Select(x => x.PillarID).Distinct().ToList()
+                    })
+                    .ToListAsync();
+
+                var pillarDict = pillarData.ToDictionary(x => x.MappingID, x => x.Pillars);
+
+                // 3. Answered Questions
+                var answeredData = await _context.Assessments
+                    .Where(a => a.IsActive && mappingIds.Contains(a.UserAssessmentMappingID))
+                    .SelectMany(a => a.PillarAssessments)
+                    .SelectMany(pa => pa.Responses)
+                    .Where(r => !r.IsDeleted)
+                    .GroupBy(r => r.PillarAssessment.Assessment.UserAssessmentMappingID)
+                    .Select(g => new
+                    {
+                        MappingID = g.Key,
+                        Count = g.Select(x => x.QuestionID).Distinct().Count()
+                    })
+                    .ToListAsync();
+
+                var answeredDict = answeredData.ToDictionary(x => x.MappingID, x => x.Count);
+
+                // 4. Question count per pillar
+                var questionCounts = await _context.Questions
+                    .Where(q => !q.IsDeleted)
+                    .GroupBy(q => q.PillarID)
+                    .Select(g => new { PillarID = g.Key, Count = g.Count() })
+                    .ToDictionaryAsync(x => x.PillarID, x => x.Count);
+
+                int overdue = 0, highRisk = 0, atRisk = 0, dueSoon = 0, onTrack = 0;
+
+                foreach (var m in mappings)
+                {
+                    if (!m.DueDate.HasValue)
+                    {
+                        onTrack++;
+                        continue;
+                    }
+
+                    var pillarsList = pillarDict.ContainsKey(m.UserAssessmentMappingID)
+                        ? pillarDict[m.UserAssessmentMappingID]
+                        : new List<int>();
+
+                    var totalQ = pillarsList.Sum(p => questionCounts.ContainsKey(p) ? questionCounts[p] : 0);
+
+                    var answered = answeredDict.ContainsKey(m.UserAssessmentMappingID)
+                        ? answeredDict[m.UserAssessmentMappingID]
+                        : 0;
+
+                    var totalDays = (m.DueDate - m.UpdatedAt)?.Days ?? 0;
+                    var daysElapsed = (DateTime.UtcNow - m.UpdatedAt)?.Days ?? 0;
+                    var daysRemaining = (m.DueDate - DateTime.UtcNow)?.Days ?? 0;
+
+                    var progress = totalQ == 0 ? 0 : (answered * 100m) / totalQ;
+                    var expected = totalDays == 0 ? 0 : (daysElapsed * 100m) / totalDays;
+
+                    if (DateTime.UtcNow > m.DueDate)
+                        overdue++;
+                    else if (progress < expected && daysRemaining <= 3)
+                        highRisk++;
+                    else if (progress < expected)
+                        atRisk++;
+                    else if (daysRemaining <= 3)
+                        dueSoon++;
+                    else
+                        onTrack++;
+                }
+
+                result.TotalOverdue = overdue;
+                result.TotalHighRisk = highRisk;
+                result.TotalAtRisk = atRisk;
+                result.TotalDueSoon = dueSoon;
+                result.TotalOnTrack = onTrack;
+
 
                 return ResultResponseDto<CardDetailsDto>.Success(result,
-                    new List<string> { "Card details fetched successfully" });
+                        new List<string> { "Card details fetched successfully" });
             }
             catch (Exception ex)
             {

@@ -18,4 +18,10 @@
         public int AnsQuestion { get; set; }
     }
 
+    public class WeeklyPillarsHistoryResponseDto
+    {
+        public List<PillarsHistroyResponseDto> Week1 { get; set; }
+        public List<PillarsHistroyResponseDto> Week2 { get; set; }
+    }
+
 }

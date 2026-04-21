@@ -2,7 +2,7 @@
 {
     public class AiCityPillarDashboardResponseDto
     {
-        public int UserAssessmentMappingID { get; set; }
+        public int? UserAssessmentMappingID { get; set; }
         public string GeographicReference { get; set; }
         public decimal ScoreProgress { get; set; }
         public List<CityPillarDashboardPillarValueDto> Pillars { get; set; } = new List<CityPillarDashboardPillarValueDto>();
@@ -16,6 +16,10 @@
         public int TotalScore { get; set; }
         public int TotalAns { get; set; }
         public int TotalQuestions { get; set; }
+
+        public int TotalCriticalQuestions { get; set; }
+
+        public int TotalAnsweredCriticalQuestions { get; set; }
         public decimal ScoreProgress { get; set; }
         public decimal CompletionRate { get; set; }
 

@@ -9,6 +9,11 @@ namespace COPPlatform.Dtos.AssessmentDto
     {
         public int UserAssessmentMappingID { get; set; }
         public int? PillarID { get; set; }
+        public DateTime? Week1StartDate { get; set; }
+        public DateTime? Week1EndDate { get; set; }
+
+        public DateTime? Week2StartDate { get; set; }
+        public DateTime? Week2EndDate { get; set; }
     }
     public class GetCityPillarHistoryRequestDto
     {
@@ -62,7 +67,7 @@ namespace COPPlatform.Dtos.AssessmentDto
 
     public class UserDashBoardRequstDto
     {
-        public int UserAssessmentMappingID { get; set; }
+        public int? UserAssessmentMappingID { get; set; }
     }
     public class GetQuesiontAssessmentHistoryRequestDto
     {

@@ -24,6 +24,7 @@ namespace COPPlatform.Dtos.QuestionDto
         public int PillarID { get; set; }
         public string QuestionText { get; set; }
         public bool IsSelected { get; set; } = false;
+        public bool IsCritical { get; set; } = false;       
         public List<HistoryQuestionAnswerRawDto> History { get; set; } = new();
         public List<QuestionOptionDto> QuestionOptions { get; set; }
     }

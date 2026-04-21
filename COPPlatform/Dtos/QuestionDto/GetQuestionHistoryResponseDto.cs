@@ -9,7 +9,7 @@ namespace COPPlatform.Dtos.QuestionDto
         public string QuestionText { get; set; }
         public int DisplayOrder { get; set; }
     }
-    public class QuestionsByUserPillarsResponsetDto : GetQuestionHistoryResponseDto
+    public class QuestionsByUserPillarsResponseDto : GetQuestionHistoryResponseDto
     {
         public List<QuestionsByUserInfo> Users { get; set; } = new List<QuestionsByUserInfo>();
     }

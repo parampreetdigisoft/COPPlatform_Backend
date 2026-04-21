@@ -6,6 +6,12 @@
         public int TotalAnalysts { get; set; }
         public int TotalEvaluators { get; set; }
 
+        public int TotalOverdue { get; set; }
+        public int TotalHighRisk { get; set; }
+        public int TotalAtRisk { get; set; }
+        public int TotalDueSoon { get; set; }
+        public int TotalOnTrack { get; set; }
+
         public int TotalAssessments { get; set; }
         public int TotalCompletedAssessments { get; set; }
         public int TotalInProgressAssessments { get; set; }
