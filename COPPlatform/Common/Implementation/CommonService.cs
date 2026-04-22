@@ -79,14 +79,14 @@ namespace COPPlatform.Common.Implementation
                 return new List<EvaluationCityProgressResultDto>();
             }
         }
-        public async Task<List<UserEvaluationPillarProgressResultDto>> GetUserProgressByAssessmentId(int userAssessmentMappingID)
+        public async Task<List<UserEvaluationPillarProgressResultDto>> GetUserProgressByAssessmentId(int? userAssessmentMappingID)
         {
             try
             {
                 return await _context.UserEvaluationPillarProgressResults
                  .FromSqlRaw(
                      "EXEC usp_getUserProgressByAssessmentId @UserAssessmentMappingID",
-                     new SqlParameter("@UserAssessmentMappingID", userAssessmentMappingID)
+                    new SqlParameter("@UserAssessmentMappingID",(object?)userAssessmentMappingID ?? DBNull.Value)
                  )
                  .AsNoTracking()
                  .ToListAsync();
@@ -99,31 +99,24 @@ namespace COPPlatform.Common.Implementation
         }
 
         public async Task<List<UserEvaluationPillarProgressResultDto>> GetUserProgressByAssessmentIdWeekly(
-    int userAssessmentMappingID,
-    DateTime? week1StartDate = null,
-    DateTime? week1EndDate = null,
-    DateTime? week2StartDate = null,
-    DateTime? week2EndDate = null)
+      int userAssessmentMappingID,
+      List<string> periods
+  )
         {
             try
             {
+                var periodsCsv = string.Join(",", periods);
+
                 return await _context.UserEvaluationPillarProgressResults
                     .FromSqlRaw(
                         @"EXEC usp_getWeeklyUserProgressByAssessmentId 
-                @UserAssessmentMappingID,
-                @Week1StartDate,
-                @Week1EndDate,
-                @Week2StartDate,
-                @Week2EndDate",
+                  @UserAssessmentMappingID,
+                  @Periods",
                         new SqlParameter("@UserAssessmentMappingID", userAssessmentMappingID),
-                        new SqlParameter("@Week1StartDate", (object?)week1StartDate ?? DBNull.Value),
-                        new SqlParameter("@Week1EndDate", (object?)week1EndDate ?? DBNull.Value),
-                        new SqlParameter("@Week2StartDate", (object?)week2StartDate ?? DBNull.Value),
-                        new SqlParameter("@Week2EndDate", (object?)week2EndDate ?? DBNull.Value)
+                        new SqlParameter("@Periods", periodsCsv)
                     )
                     .AsNoTracking()
                     .ToListAsync();
-
             }
             catch (Exception ex)
             {

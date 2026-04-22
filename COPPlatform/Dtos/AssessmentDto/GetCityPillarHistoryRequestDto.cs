@@ -9,16 +9,13 @@ namespace COPPlatform.Dtos.AssessmentDto
     {
         public int UserAssessmentMappingID { get; set; }
         public int? PillarID { get; set; }
-        public DateTime? Week1StartDate { get; set; }
-        public DateTime? Week1EndDate { get; set; }
 
-        public DateTime? Week2StartDate { get; set; }
-        public DateTime? Week2EndDate { get; set; }
+        public List<string> SelectedPeriods { get; set; } = new(); // 👈 replaces all week date fields
     }
     public class GetCityPillarHistoryRequestDto
     {
         public int UserID { get; set; }
-        public int CityID { get; set; }
+        public int UserAssessmentMappingID { get; set; }
         public int? PillarID { get; set; }
         public DateTime UpdatedAt { get; set; } = new DateTime(DateTime.UtcNow.Year, 1, 1);
     }

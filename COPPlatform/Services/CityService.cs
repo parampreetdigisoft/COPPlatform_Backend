@@ -1,4 +1,5 @@
-﻿using COPPlatform.Common.Implementation;
+﻿using ClosedXML.Excel;
+using COPPlatform.Common.Implementation;
 using COPPlatform.Common.Interface;
 using COPPlatform.Common.Models;
 using COPPlatform.Data;
@@ -8,7 +9,7 @@ using COPPlatform.Dtos.CommonDto;
 using COPPlatform.Dtos.dashboard;
 using COPPlatform.IServices;
 using COPPlatform.Models;
-using ClosedXML.Excel;
+using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
 using System.Linq.Expressions;
@@ -66,7 +67,7 @@ namespace COPPlatform.Services
 
                     image = "/assets/cities/" + fileName;
                 }
-                if(q.CityID > 0)
+                if (q.CityID > 0)
                 {
                     var existCity = await _context.Cities.FirstOrDefaultAsync(x => x.IsActive && !x.IsDeleted && q.CityName == x.CityName && x.State == q.State && x.CityID != q.CityID);
                     if (existCity != null)
@@ -106,13 +107,13 @@ namespace COPPlatform.Services
                 return ResultResponseDto<string>.Failure(new string[] { "There is an error please try later" });
             }
         }
-        public async Task<ResultResponseDto<string>> AddBulkCityAsync(BulkAddCityDto request, string image="")
+        public async Task<ResultResponseDto<string>> AddBulkCityAsync(BulkAddCityDto request, string image = "")
         {
             try
             {
                 // Normalize input list
                 var inputCities = request.Cities
-                    .Select(c => new { Country = c.Country,PostalCode = c.PostalCode, CityName = c.CityName.Trim(), State = c.State.Trim(), Region = c.Region?.Trim(), Longitude = c.Longitude, Latitude = c.Latitude })
+                    .Select(c => new { Country = c.Country, PostalCode = c.PostalCode, CityName = c.CityName.Trim(), State = c.State.Trim(), Region = c.Region?.Trim(), Longitude = c.Longitude, Latitude = c.Latitude })
                     .Distinct()
                     .ToList();
 
@@ -334,9 +335,9 @@ namespace COPPlatform.Services
                     AiScore = ai.AIProgress
                 };
         }
-        private async Task ApplyManualScoresAsync(PaginationResponse<CityResponseDto> response,PaginationRequest request,UserRole role, int year)
+        private async Task ApplyManualScoresAsync(PaginationResponse<CityResponseDto> response, PaginationRequest request, UserRole role, int year)
         {
-            var scores = await _commonService.GetCitiesProgressAsync(request.UserId.GetValueOrDefault(),(int)role, year);
+            var scores = await _commonService.GetCitiesProgressAsync(request.UserId.GetValueOrDefault(), (int)role, year);
 
             var scoreMap = scores
                 .GroupBy(x => x.UserAssessmentMappingID)
@@ -357,7 +358,7 @@ namespace COPPlatform.Services
                 ? response.Data.OrderByDescending(x => x.Score)
                 : response.Data.OrderBy(x => x.Score);
         }
-        
+
         #endregion
         public async Task<ResultResponseDto<List<UserCityMappingResponseDto>>> getAllCityByUserId(int userId, UserRole userRole)
         {
@@ -526,9 +527,9 @@ namespace COPPlatform.Services
                     return ResultResponseDto<List<UserCityMappingResponseDto>>.Failure(new string[] { "Invalid user" });
                 }
                 var year = DateTime.UtcNow.Year;
-                Expression<Func<Assessment, bool>>  predicate = a => 
-                !a.UserAssessmentMapping.IsDeleted 
-                && a.UserAssessmentMapping.UserID == userId 
+                Expression<Func<Assessment, bool>> predicate = a =>
+                !a.UserAssessmentMapping.IsDeleted
+                && a.UserAssessmentMapping.UserID == userId
                 && a.UpdatedAt.Year == year
                 && (a.AssessmentPhase == AssessmentPhase.Completed || a.AssessmentPhase == AssessmentPhase.EditRejected || a.AssessmentPhase == AssessmentPhase.EditRequested);
 
@@ -589,7 +590,7 @@ namespace COPPlatform.Services
 
                 if (userRole == UserRole.Analyst)
                     predicate = x => !x.IsDeleted && (x.AssignedByUserId == userID || x.UserID == userID);
-                else if(userRole == UserRole.Evaluator)
+                else if (userRole == UserRole.Evaluator)
                     predicate = x => !x.IsDeleted && x.UserID == userID;
                 else
                     predicate = x => !x.IsDeleted;
@@ -599,9 +600,9 @@ namespace COPPlatform.Services
                     from c in _context.Cities
                     where !c.IsDeleted && c.IsActive
                     join uc in _context.UserAssessmentMappings.Where(predicate)
-                        on c.CityID equals uc.CityID 
+                        on c.CityID equals uc.CityID
                     join a in _context.Assessments.Where(x => x.IsActive && x.UpdatedAt >= startDate && x.UpdatedAt <= endDate)
-                        on uc.UserAssessmentMappingID equals a.UserAssessmentMappingID into cityAssessments 
+                        on uc.UserAssessmentMappingID equals a.UserAssessmentMappingID into cityAssessments
                     from a in cityAssessments.DefaultIfEmpty()
                     select new
                     {
@@ -623,7 +624,7 @@ namespace COPPlatform.Services
                 cityHistory.ActiveCity = cityQuery.Where(x => x.HasMapping).Select(x => x.CityID).Distinct().Count();
                 cityHistory.CompeleteCity = cityQuery.Where(x => x.IsCompleted).Select(x => x.CityID).Distinct().Count();
                 cityHistory.InprocessCity = cityHistory.ActiveCity - cityHistory.CompeleteCity;
-                cityHistory.FinalizeCity = aICity.Where(x=>x.IsVerified).Count();
+                cityHistory.FinalizeCity = aICity.Where(x => x.IsVerified).Count();
                 cityHistory.UnFinalize = aICity.Where(x => !x.IsVerified).Count();
 
                 // 2️⃣ Get evaluators & analysts in a single query
@@ -632,7 +633,7 @@ namespace COPPlatform.Services
                     .GroupBy(u => u.Role)
                     .Select(g => new { Role = g.Key, Count = g.Count() })
                     .ToListAsync();
-                if(userRole == UserRole.Admin)
+                if (userRole == UserRole.Admin)
                 {
                     cityHistory.TotalEvaluator = userCounts.FirstOrDefault(x => x.Role == UserRole.Evaluator)?.Count ?? 0;
                     cityHistory.TotalAnalyst = userCounts.FirstOrDefault(x => x.Role == UserRole.Analyst)?.Count ?? 0;
@@ -674,7 +675,7 @@ namespace COPPlatform.Services
                     from uc in _context.UserAssessmentMappings.Where(predicate)
                     join c in _context.Cities.Where(c => !c.IsDeleted && c.IsActive)
                         on uc.CityID equals c.CityID
-                    join a in _context.AICityScores.Where(x =>  x.Year == year)
+                    join a in _context.AICityScores.Where(x => x.Year == year)
                         on c.CityID equals a.CityID into aICityScores
                     from a in aICityScores.DefaultIfEmpty()
                     select new
@@ -694,14 +695,14 @@ namespace COPPlatform.Services
                     {
                         var allPillars = manualAssessmentList.Where(x => x.UserAssessmentMappingID == g.CityID);
 
-                        var manualScore = allPillars.Any()? allPillars.Average(x => x?.ScoreProgress ?? 0): 0;
+                        var manualScore = allPillars.Any() ? allPillars.Average(x => x?.ScoreProgress ?? 0) : 0;
 
                         return new GetCitiesSubmitionHistoryReponseDto
                         {
                             CityID = g.CityID,
                             CityName = g.CityName,
-                            Score = Math.Round(manualScore,2),
-                            AnsQuestion = allPillars.Any() ? allPillars.Sum(x=>x?.TotalAns ?? 0) : 0,
+                            Score = Math.Round(manualScore, 2),
+                            AnsQuestion = allPillars.Any() ? allPillars.Sum(x => x?.TotalAns ?? 0) : 0,
                             ScoreProgress = Math.Round(manualScore, 2),
                             AIScore = g.AIProgress ?? 0
                         };
@@ -802,7 +803,7 @@ namespace COPPlatform.Services
             var c = 2 * Math.Asin(Math.Sqrt(a));
             return R * c;
         }
-        
+
         public async Task<ResultResponseDto<List<UserCityMappingResponseDto>>> GetAiAccessCity(int userId, UserRole userRole)
         {
             try
@@ -866,8 +867,8 @@ namespace COPPlatform.Services
             {
                 int year = DateTime.UtcNow.Year;
                 var cities = await _commonService.GetCitiesProgressForAdmin(userId, (int)userRole, year);
-                
-                if(cities == null) return ResultResponseDto<byte[]>.Failure(new string[] { "There is an error please try later" });
+
+                if (cities == null) return ResultResponseDto<byte[]>.Failure(new string[] { "There is an error please try later" });
                 IEnumerable<IGrouping<(int CityID, string CityName, string State, string Country), GetCitiesProgressAdminDto>>
                 result =
                     cities.GroupBy(x => (
@@ -876,7 +877,7 @@ namespace COPPlatform.Services
                         x.State,
                         x.Country
                     ));
-                var byteRes =MakeCityPillarSheet(result);
+                var byteRes = MakeCityPillarSheet(result);
 
                 return ResultResponseDto<byte[]>.Success(byteRes, new string[] { "get successfully" });
             }
@@ -948,7 +949,7 @@ namespace COPPlatform.Services
                     int startRow = row;
                     bool isFirstPillar = true;
 
-                    var cityProgress = pillars.Average(x=>x.PillarProgress);
+                    var cityProgress = pillars.Average(x => x.PillarProgress);
                     foreach (var pillar in pillars)
                     {
                         ws.Cell(row, 1).Value = sno++;
@@ -1017,16 +1018,16 @@ namespace COPPlatform.Services
                     }
                 }
 
-                ws.Column(1).Width = 8;    
-                ws.Column(2).Width = 20;   
-                ws.Column(3).Width = 15;   
-                ws.Column(4).Width = 15;   
-                ws.Column(5).Width = 45;   
-                ws.Column(6).Width = 14;   
-                ws.Column(7).Width = 14;   
-                ws.Column(8).Width = 25;   
-                ws.Column(9).Width = 20;   
-                ws.Column(10).Width = 28;  
+                ws.Column(1).Width = 8;
+                ws.Column(2).Width = 20;
+                ws.Column(3).Width = 15;
+                ws.Column(4).Width = 15;
+                ws.Column(5).Width = 45;
+                ws.Column(6).Width = 14;
+                ws.Column(7).Width = 14;
+                ws.Column(8).Width = 25;
+                ws.Column(9).Width = 20;
+                ws.Column(10).Width = 28;
 
 
                 ws.SheetView.FreezeRows(5);
@@ -1086,15 +1087,15 @@ namespace COPPlatform.Services
 
                 // STEP 2: Total Questions
                 var pillars = await _context.Pillars
-                    .Select(p => new 
-                    { 
+                    .Select(p => new
+                    {
                         p.PillarID,
                         p.PillarName,
-                        Questions = p.Questions.Where(x=>!x.IsDeleted).Count() 
+                        Questions = p.Questions.Where(x => !x.IsDeleted).Count()
                     })
                     .ToListAsync();
 
-                var totalQuestions = pillars.Select(x=>x.Questions).Sum();
+                var totalQuestions = pillars.Select(x => x.Questions).Sum();
 
 
                 var assessmentScores = new List<decimal>();
@@ -1105,7 +1106,7 @@ namespace COPPlatform.Services
                 {
                     var allResponses = item.PillarAssessments
                         .SelectMany(p => p.Responses)
-                        .Select(x=>((int?)x) ?? 0 )
+                        .Select(x => ((int?)x) ?? 0)
                         .ToList();
 
                     var totalAnswers = allResponses.Count;
@@ -1122,7 +1123,7 @@ namespace COPPlatform.Services
                     {
                         var pResponses = pillar.Responses.ToList();
                         var pTotalAnswers = pResponses.Count;
-                        var pTotalScore = pResponses.Sum(x=>(int?)x ?? 0);
+                        var pTotalScore = pResponses.Sum(x => (int?)x ?? 0);
 
                         if (pTotalAnswers > 0)
                         {
@@ -1151,9 +1152,9 @@ namespace COPPlatform.Services
                 if (pillarScores.Any())
                 {
                     var pillarIdToName = pillars.ToDictionary(p => p.PillarID, p => p.PillarName);
-                    
 
-                    result.AveragePillarScore = pillarScores.Any()? pillarScores.Average(x => x.Value) : 0;
+
+                    result.AveragePillarScore = pillarScores.Any() ? pillarScores.Average(x => x.Value) : 0;
 
                     var maxPillar = pillarScores.OrderByDescending(x => x.Value).First();
                     result.HighestPillarScore = new PillarCardDetailsDto
@@ -1171,7 +1172,7 @@ namespace COPPlatform.Services
                         Value = minPillar.Value
                     };
                 }
-                
+
 
                 // STEP 6: User counts (Admin only)
                 if (userRole == UserRole.Admin)
@@ -1291,6 +1292,53 @@ namespace COPPlatform.Services
                 result.TotalAtRisk = atRisk;
                 result.TotalDueSoon = dueSoon;
                 result.TotalOnTrack = onTrack;
+                if (userRole == UserRole.Analyst)
+                {
+                    var history = await _commonService
+                        .GetUserProgressByAssessmentId(null);
+
+                    var userIds = await _context.Users
+                        .Where(u => !u.IsDeleted && u.CreatedBy == userID)
+                        .Select(u => u.UserID)
+                        .ToListAsync();
+
+                    var userPillars = await _context.UserPillarMappings
+                        .Where(x => x.UserID == userID && !x.IsDeleted && x.IsActive)
+                        .Select(x => x.PillarID)
+                        .ToListAsync();
+
+                    // 🔥 Use HashSet for better performance
+                    var userIdSet = userIds.ToHashSet();
+                    var pillarIdSet = userPillars.ToHashSet();
+
+                    var filteredHistory = history
+                        .Where(x => pillarIdSet.Contains(x.PillarID) &&
+                                    userIdSet.Contains(x.SubmittedByUserID))
+                        .ToList();
+
+                    var evaluatorSummary = filteredHistory
+                                    .GroupBy(u => u.SubmittedByUserID)
+                                    .Select(g =>
+                                    {
+                                        var first = g.First();
+                                        return new EvaluatorCompletionSummaryDto
+                                        {
+                                            EvaluatorName = first.SubmittedByUserName ?? "",
+                                            CompletionRate = first.CompletionRate
+                                        };
+                                    })
+                                    .ToList();
+                    var maxEvaluator = evaluatorSummary
+    .OrderByDescending(x => x.CompletionRate)
+    .FirstOrDefault();
+
+                    var minEvaluator = evaluatorSummary
+                        .OrderBy(x => x.CompletionRate)
+                        .FirstOrDefault();
+                    result.MaximumCompletionRateEvaluator = maxEvaluator;
+                    result.MinimumCompletionRateEvaluator = minEvaluator;
+                }
+
 
 
                 return ResultResponseDto<CardDetailsDto>.Success(result,

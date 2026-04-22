@@ -19,6 +19,13 @@
         public decimal AveragePillarScore { get; set; }
         public PillarCardDetailsDto HighestPillarScore { get; set; } = new PillarCardDetailsDto();
         public PillarCardDetailsDto LowestPillarScore { get; set; } = new PillarCardDetailsDto();
+
+        public EvaluatorCompletionSummaryDto? MaximumCompletionRateEvaluator { get; set; }
+
+        public EvaluatorCompletionSummaryDto? MinimumCompletionRateEvaluator { get; set; }
+
+
+
     }
 
     public class PillarCardDetailsDto
@@ -26,5 +33,10 @@
         public int PillarID { get; set; }
         public string PillarName { get; set; }
         public decimal Value { get; set; }
+    }
+    public class EvaluatorCompletionSummaryDto
+    {
+        public string EvaluatorName { get; set; }
+        public decimal CompletionRate { get; set; }
     }
 }

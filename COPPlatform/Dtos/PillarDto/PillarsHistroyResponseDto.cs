@@ -7,6 +7,9 @@
         public int DisplayOrder { get; set; } = 0;
         public int UserAssessmentMappingID { get; set; } = 0;
         public List<PillarsUserHistroyResponseDto> Users { get; set; } = new();
+
+        public string WeekType { get; set; }
+
     }
     public class PillarsUserHistroyResponseDto
     {

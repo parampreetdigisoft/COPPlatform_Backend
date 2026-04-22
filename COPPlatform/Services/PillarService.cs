@@ -1,4 +1,5 @@
-﻿using ClosedXML.Excel;
+﻿using Azure;
+using ClosedXML.Excel;
 using COPPlatform.Backgroundjob;
 using COPPlatform.Common.Interface;
 using COPPlatform.Common.Models;
@@ -79,7 +80,7 @@ namespace COPPlatform.Services
                 var existing = await _context.Pillars.FindAsync(id);
                 if (existing == null) return null;
 
-                if(existing.IsLocked != pillar.IsLocked)
+                if (existing.IsLocked != pillar.IsLocked)
                 {
                     var pillars = _context.UserPillarMappings.Where(x => x.PillarID == id && !x.IsDeleted);
 
@@ -87,7 +88,7 @@ namespace COPPlatform.Services
                     {
                         p.IsActive = !pillar.IsLocked;
                     }
-                }                            
+                }
 
                 existing.PillarName = pillar.PillarName;
                 existing.Description = pillar.Description;
@@ -99,7 +100,7 @@ namespace COPPlatform.Services
                     existing.Weight = pillar.Weight;
                     existing.Reliability = pillar.Reliability;
                     _download.InsertAnalyticalLayerResults();
-                }                
+                }
 
                 await _context.SaveChangesAsync();
 
@@ -142,13 +143,50 @@ namespace COPPlatform.Services
                 if (user == null)
                     return ResultResponseDto<List<PillarWithQuestionsDto>>.Failure(new[] { "Invalid user" });
 
+
+                List<int> userIdsexists = new List<int>();
+
+                if (user.Role == UserRole.Admin)
+                {
+                    userIdsexists = null; // means NO FILTER
+                }
+                else if (user.Role == UserRole.Analyst)
+                {
+                    var evaluatorIds = await _context.Users
+                        .Where(u => u.CreatedBy == request.UserID && !u.IsDeleted)
+                        .Select(u => u.UserID)
+                        .ToListAsync();
+
+                    userIdsexists = evaluatorIds.Append(request.UserID).ToList();
+                    if (user.CreatedBy.HasValue && user.CreatedBy.Value > 0)
+                    {
+                        userIdsexists.Add(user.CreatedBy.Value);
+                    }
+
+                    // ✅ remove duplicates (important)
+                    userIdsexists = userIdsexists.Distinct().ToList();
+                }
+
+                else
+                {
+                    userIdsexists = new List<int> { request.UserID };
+                }
+
+
+
                 // 2. Filter user-city mappings based on role
                 Expression<Func<UserAssessmentMapping, bool>> predicate = user.Role switch
                 {
-                    UserRole.Analyst => x => !x.IsDeleted && x.CityID == request.CityID &&
-                                             (x.AssignedByUserId == request.UserID),
-                    UserRole.Evaluator => x => !x.IsDeleted && x.CityID == request.CityID && x.UserID == request.UserID,
-                    _ => x => !x.IsDeleted && x.CityID == request.CityID
+                    UserRole.Analyst => x => !x.IsDeleted &&
+                                             x.UserAssessmentMappingID == request.UserAssessmentMappingID &&
+                                             (x.UserID == request.UserID || userIdsexists!.Contains(x.UserID)),
+
+                    UserRole.Evaluator => x => !x.IsDeleted &&
+                                               x.UserAssessmentMappingID == request.UserAssessmentMappingID &&
+                                               x.UserID == request.UserID,
+
+                    _ => x => !x.IsDeleted &&
+                              x.UserAssessmentMappingID == request.UserAssessmentMappingID
                 };
 
                 var mappingIds = await _context.UserAssessmentMappings
@@ -161,21 +199,42 @@ namespace COPPlatform.Services
                     .Include(a => a.UserAssessmentMapping)
                     .Include(a => a.PillarAssessments)
                         .ThenInclude(pa => pa.Responses)
-                    .Where(a => mappingIds.Contains(a.UserAssessmentMappingID) && a.IsActive && a.UpdatedAt.Year == request.UpdatedAt.Year && (a.AssessmentPhase == AssessmentPhase.Completed || a.AssessmentPhase == AssessmentPhase.EditRejected || a.AssessmentPhase == AssessmentPhase.EditRequested))
+                    .Where(a => mappingIds.Contains(a.UserAssessmentMappingID) && a.IsActive)
                     .AsNoTracking()
                     .ToListAsync();
 
                 // 4. Get pillar list with questions + options
-                var pillars = await _context.Pillars
-                    .Include(p => p.Questions)
-                        .ThenInclude(q => q.QuestionOptions)
-                    .Where(p => !request.PillarID.HasValue || p.PillarID == request.PillarID)
+                IQueryable<Pillar> pillarQuery = _context.Pillars.Include(p => p.Questions).ThenInclude(q => q.QuestionOptions).AsNoTracking();
+
+                if (user.Role != UserRole.Admin)
+                {
+                    var mappedPillarIds = await _context.UserPillarMappings
+                        .Where(up => up.UserID == request.UserID && !up.IsDeleted)
+                        .Select(up => up.PillarID)
+                        .ToListAsync();
+
+                    pillarQuery = pillarQuery.Where(p => mappedPillarIds.Contains(p.PillarID));
+                }
+
+                // optional filter by request
+                if (request.PillarID.HasValue)
+                {
+                    pillarQuery = pillarQuery.Where(p => p.PillarID == request.PillarID);
+                }
+
+                var pillars = await pillarQuery
                     .OrderBy(p => p.DisplayOrder)
-                    .AsNoTracking()
                     .ToListAsync();
 
                 // 5. Preload users dictionary
-                var userIds = assessments.Select(a => a.UserAssessmentMapping.UserID).Distinct().ToList();
+                var userIds = assessments .Where(a => mappingIds.Contains(a.UserAssessmentMappingID))
+       .SelectMany(a => a.PillarAssessments ?? new List<PillarAssessment>())
+       .SelectMany(pa => pa.Responses ?? new List<AssessmentResponse>())
+       .Where(r => !r.IsDeleted)
+       .Select(r => r.UpdatedBy)
+       .Distinct()
+       .ToList();
+
                 var usersDict = await _context.Users
                     .Where(u => userIds.Contains(u.UserID))
                     .ToDictionaryAsync(u => u.UserID, u => u.FullName);
@@ -189,7 +248,7 @@ namespace COPPlatform.Services
                     TotalQuestions = p.Questions.Count,
                     Questions = p.Questions
                         .OrderBy(q => q.DisplayOrder)
-                        .Where(q=>!q.IsDeleted)
+                        .Where(q => !q.IsDeleted)
                         .Select(q =>
                         {
                             var userAnswers = userIds.Select(uid =>
@@ -212,7 +271,7 @@ namespace COPPlatform.Services
                                     Justification = response?.Justification ?? "",
                                     OptionText = option?.OptionText ?? ""
                                 };
-                            }).ToDictionary(x=>x.UserID);
+                            }).ToDictionary(x => x.UserID);
 
                             return new QuestionWithUserDto
                             {
@@ -238,16 +297,15 @@ namespace COPPlatform.Services
             try
             {
                 var response = await GetPillarsWithQuestions(requestDto);
-                var city = await _context.Cities.FirstOrDefaultAsync(x => x.CityID == requestDto.CityID);
 
                 if (!response.Succeeded)
                 {
                     return new Tuple<string, byte[]>("", Array.Empty<byte>());
                 }
 
-                var byteArray = MakePillarSheet(response.Result, city);
+                var byteArray = MakePillarSheet(response.Result);
 
-                return new("ExportPillarsHistory"+ requestDto.CityID+""+requestDto.PillarID, byteArray);
+                return new("ExportPillarsHistory"+ requestDto.UserAssessmentMappingID+""+requestDto.PillarID, byteArray);
             }
             catch (Exception ex)
             {
@@ -256,11 +314,11 @@ namespace COPPlatform.Services
             }
         }
 
-        private byte[] MakePillarSheet(List<PillarWithQuestionsDto> pillars, Models.City? city)
+        private byte[] MakePillarSheet(List<PillarWithQuestionsDto> pillars)
         {
             using (var workbook = new XLWorkbook())
             {
-                var name = city == null ? $"{pillars.Count}-Pillars-Result" : city?.CityName+"-"+city?.State+ $"-{pillars.Count}-Pillars-Result";
+                var name = $"{pillars.Count}-Pillars-Result";
                 var shortName = name.Length > 30 ? name.Substring(0, 30) : name;
 
                 var ws = workbook.Worksheets.Add(shortName);
@@ -351,7 +409,7 @@ namespace COPPlatform.Services
                         ws.Cell(row, c++).Value = $"{pillarCounter - 1}.{questionCounter++}";
                         ws.Cell(row, 1).Style.Font.Bold = true;
                         ws.Cell(row, c++).Value = question.QuestionText;
-    
+
 
                         foreach (var user in names)
                         {
@@ -446,11 +504,11 @@ namespace COPPlatform.Services
                                              AnsQuestion = first.TotalAns,
                                              CompeletionRate = first.CompletionRate
                                          };
-                                     }).OrderBy(x=>x.UserID).ToList()
+                                     }).OrderBy(x => x.UserID).ToList()
                         });
 
                 // Step 3: Merge (Left Join equivalent, but cleaner)
-                var result = userPillars    
+                var result = userPillars
                     .Select(p => groupedHistory.TryGetValue(p.PillarID, out var historyData)
                         ? historyData
                         : new PillarsHistroyResponseDto
@@ -476,27 +534,23 @@ namespace COPPlatform.Services
             }
         }
 
-        public async Task<ResultResponseDto<WeeklyPillarsHistoryResponseDto>> GetResponsesByUserIdWeekly( GetPillarResponseHistoryRequestNewDto request,
-        int userId, UserRole userRole)
+        public async Task<ResultResponseDto<List<PillarsHistroyResponseDto>>> GetResponsesByUserIdWeekly(GetPillarResponseHistoryRequestNewDto request,
+    int userId, UserRole userRole)
         {
             try
             {
                 var history = await _commonService
-                    .GetUserProgressByAssessmentIdWeekly(request.UserAssessmentMappingID, request.Week1StartDate, request.Week1EndDate
-                    , request.Week2StartDate, request.Week2EndDate);
-
-                if (!history.Any())
-                {
-                    return ResultResponseDto<WeeklyPillarsHistoryResponseDto>
-                        .Failure(new List<string> { "No data found for the given user and assessment." });
-                }
+                    .GetUserProgressByAssessmentIdWeekly(
+                        request.UserAssessmentMappingID,
+                        request.SelectedPeriods);
 
                 // Step 1: Get user pillars
                 var userPillars = await _context.UserPillarMappings
                     .Where(x => x.UserAssessmentMappingID == request.UserAssessmentMappingID &&
-                               (x.UserID == userId ||
-                               ((userRole == UserRole.Admin || userRole == UserRole.Executive) && x.User.Role == UserRole.Analyst))
-                               && !x.IsDeleted && x.IsActive)
+                                (x.UserID == userId ||
+                                ((userRole == UserRole.Admin || userRole == UserRole.Executive)
+                                    && x.User.Role == UserRole.Analyst))
+                                && !x.IsDeleted && x.IsActive)
                     .Select(x => new
                     {
                         x.PillarID,
@@ -505,72 +559,114 @@ namespace COPPlatform.Services
                     })
                     .ToListAsync();
 
-                // 🔥 Split by week
-                var week1Data = history.Where(x => x.WeekType == "Week1").ToList();
-                var week2Data = history.Where(x => x.WeekType == "Week2").ToList();
-
-                // 🔁 Reusable function (your same logic)
-                List<PillarsHistroyResponseDto> BuildResult(List<UserEvaluationPillarProgressResultDto> data)
+                // ─────────────────────────────────────────────
+                // STEP 2: NORMALIZE DATA
+                // ─────────────────────────────────────────────
+                foreach (var item in history)
                 {
-                    var groupedHistory = data
-                        .GroupBy(x => x.PillarID)
-                        .ToDictionary(
-                            g => g.Key,
-                            g => new PillarsHistroyResponseDto
-                            {
-                                PillarID = g.Key,
-                                PillarName = g.First().PillarName,
-                                DisplayOrder = g.First().DisplayOrder,
-                                UserAssessmentMappingID = request.UserAssessmentMappingID,
-                                Users = g.GroupBy(u => u.SubmittedByUserID)
-                                         .Select(ug =>
-                                         {
-                                             var first = ug.First();
-                                             return new PillarsUserHistroyResponseDto
-                                             {
-                                                 UserID = ug.Key,
-                                                 FullName = first.SubmittedByUserName ?? "",
-                                                 ScoreProgress = first.ScoreProgress,
-                                                 TotalQuestion = first.TotalQuestions,
-                                                 AnsQuestion = first.TotalAns,
-                                                 CompeletionRate = first.CompletionRate
-                                             };
-                                         })
-                                         .OrderBy(x => x.UserID)
-                                         .ToList()
-                            });
+                    item.WeekType = NormalizeWeek(item.WeekType);
+                }
 
-                    return userPillars
-                        .Select(p => groupedHistory.TryGetValue(p.PillarID, out var historyData)
-                            ? historyData
-                            : new PillarsHistroyResponseDto
+                // ─────────────────────────────────────────────
+                // STEP 3: GROUP DATA (SAFE KEY)
+                // ─────────────────────────────────────────────
+                var grouped = history
+                    .GroupBy(x => (x.WeekType, x.PillarID))
+                    .ToDictionary(
+                        g => g.Key,
+                        g => new PillarsHistroyResponseDto
+                        {
+                            PillarID = g.Key.PillarID,
+                            PillarName = g.First().PillarName,
+                            DisplayOrder = g.First().DisplayOrder,
+                            UserAssessmentMappingID = request.UserAssessmentMappingID,
+                            WeekType = g.Key.WeekType,
+
+                            Users = g
+                                .Where(x => x.SubmittedByUserID > 0)
+                                .GroupBy(u => u.SubmittedByUserID)
+                                .Select(ug =>
+                                {
+                                    var first = ug.First();
+
+                                    return new PillarsUserHistroyResponseDto
+                                    {
+                                        UserID = ug.Key,
+                                        FullName = first.SubmittedByUserName ?? "Unknown",
+                                        ScoreProgress = first.ScoreProgress,
+                                        TotalQuestion = first.TotalQuestions,
+                                        AnsQuestion = first.TotalAns,
+                                        CompeletionRate = first.CompletionRate
+                                    };
+                                })
+                                .ToList()
+                        });
+
+                // ─────────────────────────────────────────────
+                // STEP 4: BUILD FINAL RESPONSE
+                // ─────────────────────────────────────────────
+                var result = new List<PillarsHistroyResponseDto>();
+
+                foreach (var week in request.SelectedPeriods.Select(NormalizeWeek))
+                {
+                    foreach (var p in userPillars)
+                    {
+                        var key = (week, p.PillarID);
+
+                        if (grouped.TryGetValue(key, out var data))
+                        {
+                            // IMPORTANT: preserve grouped Users safely
+                            result.Add(new PillarsHistroyResponseDto
+                            {
+                                PillarID = data.PillarID,
+                                PillarName = data.PillarName,
+                                DisplayOrder = data.DisplayOrder,
+                                UserAssessmentMappingID = data.UserAssessmentMappingID,
+                                WeekType = data.WeekType,
+                                Users = data.Users ?? new List<PillarsUserHistroyResponseDto>()
+                            });
+                        }
+                        else
+                        {
+                            result.Add(new PillarsHistroyResponseDto
                             {
                                 PillarID = p.PillarID,
                                 PillarName = p.PillarName,
                                 DisplayOrder = p.DisplayOrder,
                                 UserAssessmentMappingID = request.UserAssessmentMappingID,
+                                WeekType = week,
                                 Users = new List<PillarsUserHistroyResponseDto>()
-                            })
-                        .OrderBy(x => x.DisplayOrder)
-                        .ToList();
+                            });
+                        }
+                    }
                 }
-               
-                var response = new WeeklyPillarsHistoryResponseDto
-                {                   
-                    Week1 = BuildResult(week1Data),
-                    Week2 = BuildResult(week2Data)
-                };                
 
-                return ResultResponseDto<WeeklyPillarsHistoryResponseDto>
-                    .Success(response, new List<string> { "Result found successfully." });
+                return ResultResponseDto<List<PillarsHistroyResponseDto>>
+                    .Success(result, new List<string> { "Result found successfully." });
             }
             catch (Exception ex)
             {
                 await _appLogger.LogAsync("Error occurred in GetPillarsHistoryByUserId", ex);
 
-                return ResultResponseDto<WeeklyPillarsHistoryResponseDto>
+                return ResultResponseDto<List<PillarsHistroyResponseDto>>
                     .Failure(new List<string> { "Something went wrong while fetching data." });
             }
+        }
+        private string NormalizeWeek(string week)
+        {
+            if (string.IsNullOrWhiteSpace(week))
+                return string.Empty;
+
+            week = week.Trim().ToUpper();
+
+            return week switch
+            {
+                "W1" or "WEEK1" => "WEEK1",
+                "W2" or "WEEK2" => "WEEK2",
+                "W3" or "WEEK3" => "WEEK3",
+                "W4" or "WEEK4" => "WEEK4",
+                _ => week
+            };
         }
     }
 }

@@ -17,8 +17,8 @@ namespace COPPlatform.IServices
         Task<bool> DeleteAsync(int id);
         Task<Tuple<string, byte[]>> ExportPillarsHistoryByUserId(GetCityPillarHistoryRequestDto requestDto);
         Task<ResultResponseDto<List<PillarsHistroyResponseDto>>> GetResponsesByUserId(GetPillarResponseHistoryRequestNewDto request, int userId, UserRole userRole);
-        Task<ResultResponseDto<WeeklyPillarsHistoryResponseDto>> GetResponsesByUserIdWeekly(
-        GetPillarResponseHistoryRequestNewDto request, int userId,UserRole userRole);
+        Task<ResultResponseDto<List<PillarsHistroyResponseDto>>> GetResponsesByUserIdWeekly( GetPillarResponseHistoryRequestNewDto request,int userId,
+         UserRole userRole);
 
     }
 } 
