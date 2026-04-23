@@ -1175,7 +1175,7 @@ namespace COPPlatform.Services
 
 
                 // STEP 6: User counts (Admin only)
-                if (userRole == UserRole.Admin)
+                if (userRole == UserRole.Admin || userRole== UserRole.Executive)
                 {
                     var userCounts = await _context.Users
                         .Where(u => !u.IsDeleted)
