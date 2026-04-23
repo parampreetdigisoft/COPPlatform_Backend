@@ -8,7 +8,7 @@ namespace COPPlatform.IServices
 {
     public interface IUserService
     {
-        User GetByEmail(string email);
+        User? GetByEmail(string email);
         Task<PaginationResponse<GetUserByRoleResponse>> GetUserByRoleWithAssignedCity(GetUserByRoleRequestDto requestDto,UserRole userRole);
         Task<ResultResponseDto<List<PublicUserResponse>>> GetAccessUsers(GetAssignUserDto requestDto, UserRole userRole, int userId);
         Task<ResultResponseDto<UpdateUserResponseDto>> UpdateUser(UpdateUserDto requestDto);

@@ -30,7 +30,7 @@ namespace COPPlatform.Services
             _appSettings = appSettings.Value;
             _emailService = emailService;
         }
-        public User GetByEmail(string email)
+        public User? GetByEmail(string email)
         {
             return _context.Users.FirstOrDefault(u => u.Email == email);
         }
