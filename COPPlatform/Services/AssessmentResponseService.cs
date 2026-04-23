@@ -1111,6 +1111,7 @@ namespace COPPlatform.Services
                     hasAccess = userRole switch
                     {
                         UserRole.Admin => true,
+                        UserRole.Executive => true,
 
                         // Analyst can access their own mappings
                         UserRole.Analyst => await _context.UserAssessmentMappings

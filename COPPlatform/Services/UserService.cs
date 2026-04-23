@@ -45,7 +45,7 @@ namespace COPPlatform.Services
 
                 Expression<Func<User, bool>> predicate = userRole switch
                 {
-                    UserRole.Admin => x => !x.IsDeleted && request.GetUserRole.HasValue ? x.Role == request.GetUserRole : (x.Role == UserRole.Evaluator || x.Role == UserRole.Executive),
+                    UserRole.Admin => x => !x.IsDeleted && request.GetUserRole.HasValue ? x.Role == request.GetUserRole : (x.Role == UserRole.Executive),
                     _ => x => !x.IsDeleted && x.Role == UserRole.Evaluator && x.CreatedBy == request.UserId
                 };
 
