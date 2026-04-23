@@ -269,12 +269,9 @@ namespace COPPlatform.Services
                 {
                     mappingQuery = role switch
                     {
-                        UserRole.Analyst => mappingQuery
-                            .Where(x => x.UserID == request.UserId),
-
-                        UserRole.Evaluator => mappingQuery
+                        UserRole.Analyst or UserRole.Evaluator => mappingQuery
                             .Where(x => x.UserPillarMappings
-                                .Any(up => up.UserID == request.UserId)),
+                                .Any(up => up.UserID == request.UserId && !up.IsDeleted && up.IsActive)),
 
                         _ => mappingQuery
                     };
@@ -1077,7 +1074,7 @@ namespace COPPlatform.Services
                 }
 
                 return ResultResponseDto<List<GetAssignedAssessmentResponseDto>>
-                    .Success(data, new[] { "Pillars fetched successfully" });
+                    .Success(data, new[] { "User Assessment fetched successfully" });
             }
             catch (Exception ex)
             {
@@ -1159,6 +1156,13 @@ namespace COPPlatform.Services
                         .Select(pa => pa.PillarID)
                         .Distinct()
                         .ToListAsync();
+                    if (userRole == UserRole.Evaluator)
+                    {
+                        mappedPillarIds = await _context.UserPillarMappings.Where(upm => upm.UserID == userId
+                     && !upm.IsDeleted).Select(upm => upm.PillarID).Distinct().ToListAsync();
+                    }
+
+
                 }
                 else if (userRole == UserRole.Analyst || userRole == UserRole.Evaluator)
                 {
