@@ -150,6 +150,30 @@ namespace COPPlatform.Controllers
 
             return Ok(response);
         }
+
+        [HttpPost]
+        [Route("sendEmail")]
+        public async Task<IActionResult> SendEmail([FromBody] SendEmailDto request)
+        {
+            var claimUserId = GetUserIdFromClaims();
+            if (claimUserId == null)
+                return Unauthorized("User ID not found.");
+
+            var role = GetRoleFromClaims();
+            if (role == null)
+                return Unauthorized("You Don't have access.");
+
+            if (!Enum.TryParse<UserRole>(role, true, out var userRole))
+            {
+                return Unauthorized("You Don't have access.");
+            }
+            var response = await _userService.SendEmail(request, userRole, claimUserId.GetValueOrDefault());
+
+            if (response == null)
+                return StatusCode(500, "User Invitation failed due to a server error.");
+
+            return Ok(response);
+        }
     }
 
     public class RegisterRequest

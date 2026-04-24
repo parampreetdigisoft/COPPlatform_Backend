@@ -22,4 +22,11 @@ namespace COPPlatform.Dtos.UserDtos
         public bool Is2FAEnabled { get; set; } = false;
         public TieredAccessPlan Tier { get; set; } = TieredAccessPlan.Pending;
     }
+
+    public class SendEmailDto
+    {
+        public string EmailSubject { get; set; } = null!;
+
+        public string EmailMessage { get; set; } = null!;
+    }
 }

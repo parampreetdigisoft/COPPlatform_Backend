@@ -507,5 +507,56 @@ namespace COPPlatform.Services
             }
         }
 
+
+
+        public async Task<ResultResponseDto<bool>> SendEmail(SendEmailDto requestDto, UserRole userRole, int userID)
+        {
+            try
+            {
+
+                var user = await _context.Users.FindAsync(userID);
+                if (user == null)
+                    return ResultResponseDto<bool>.Failure(new List<string>() { "Invalid request " });
+
+                var userAdmin = await _context.Users.FindAsync(1);
+                if (userAdmin == null)
+                {
+                    return ResultResponseDto<bool>.Failure(new List<string>() { "Invalid request " });
+                }
+
+                var emailModel = new EmailInvitationSendRequestDto
+                    {
+                        
+                        Title = "Executive Alert: Data Discrepancy Identified",
+                        ApiUrl = _appSettings.ApiUrl,
+                        UserName = user.FullName + " ("+ user.Email +")",
+                        MsgText = requestDto.EmailMessage,
+                        Mail = _appSettings.AdminMail,                        
+                    };
+
+                    var isMailSent = await _emailService.SendEmailAsync(userAdmin.Email, requestDto.EmailSubject,
+                        "~/Views/EmailTemplates/EvaluatorEmail.cshtml", emailModel
+                    );
+
+                    if (!isMailSent)
+                    {
+                        return ResultResponseDto<bool>.Failure(new List<string>()
+                            { "Failed to send email confirmation. Please try again later." }
+                         );
+                    }                    
+                
+
+                // Update fields
+                
+
+                return ResultResponseDto<bool>.Success(isMailSent, new List<string> { "Updated successfully" });
+            }
+            catch (Exception ex)
+            {
+                await _appLogger.LogAsync("Error Occure UpdateUser", ex);
+                return ResultResponseDto<bool>.Failure(new string[] { "There is an error please try later" });
+            }
+        }
+
     }
 }

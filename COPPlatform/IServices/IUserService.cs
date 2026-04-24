@@ -17,5 +17,7 @@ namespace COPPlatform.IServices
         Task<PaginationResponse<GetInvitationResponseDto>> GetInvitations(GetInvitationRequestDto request, UserRole userRole, int userId);
         Task<ResultResponseDto<string>> DeleteInvitation(DeleteInvitationDto request, UserRole userRole, int userId);
 
+        Task<ResultResponseDto<bool>> SendEmail(SendEmailDto requestDto,UserRole userRole, int userID);
+
     }
 } 
