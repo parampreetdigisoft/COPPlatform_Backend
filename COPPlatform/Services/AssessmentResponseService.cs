@@ -41,7 +41,7 @@ namespace COPPlatform.Services
                 return new List<AssessmentResponse>();
             }
         }
-        public async Task<AssessmentResponse> GetByIdAsync(int id)
+        public async Task<AssessmentResponse?> GetByIdAsync(int id)
         {
             try
             {
@@ -1084,6 +1084,274 @@ namespace COPPlatform.Services
                     .Failure(new[] { "Error while fetching assigned assessments" });
             }
         }
+
+
+
+        public async Task<ResultResponseDto<List<GetExecutiveAssignedAssessmentResponseDto>>> GetExecutiveAssignedInvitations(
+    int userID, UserRole userRole, string? searchText)
+       {
+            try
+            {
+                List<GetAssignedAssessmentResponseDto> data = new();
+
+                // Normalize search text
+                searchText = searchText?.Trim();
+
+                if (userRole == UserRole.Admin || userRole == UserRole.Executive)
+                {
+                    // 🔹 Step 1: Fetch evaluation data
+                    var pillarEvaluationsList = await _commonService
+                        .GetAssessmentProgressAsync(userID, (int)userRole);
+
+                    // 🔹 Step 2: Optimize lookup (VERY IMPORTANT for performance)
+                    var evalLookup = pillarEvaluationsList
+                        .GroupBy(x => new { x.UserAssessmentMappingID, x.PillarID })
+                        .ToDictionary(g => g.Key, g => g.ToList());
+
+                    // 🔹 Step 3: Fetch mappings with required includes
+                    var query = _context.UserAssessmentMappings
+                        .Where(x => !x.IsDeleted && x.IsActive);
+
+                    if (!string.IsNullOrWhiteSpace(searchText))
+                    {
+                        query = query.Where(x =>
+                            EF.Functions.Like(x.GeographicReference, $"%{searchText}%"));
+                    }
+
+                    var mappings = await query
+                        .Include(x => x.User)
+                        .Include(x => x.UserPillarMappings)
+                            .ThenInclude(p => p.Pillar)
+                                .ThenInclude(p => p.Questions)
+                        .OrderByDescending(x => x.Year)
+                        .ToListAsync();
+
+                    // 🔹 Step 4: Map data (IN-MEMORY)
+                    data = mappings.Select(upm => new GetAssignedAssessmentResponseDto
+                    {
+                        UserAssessmentMappingID = upm.UserAssessmentMappingID,
+                        UserID = upm.UserID,
+                        Year = upm.Year,
+                        DueDate = upm.DueDate,
+                        UpdatedAt = upm.UpdatedAt,
+
+                        AssignedBy = upm.User.FullName,
+                        GeographicReference = upm.GeographicReference,
+
+                        UserPillarMappings = upm.UserPillarMappings
+                            .Where(p => !p.IsDeleted && p.IsActive && p.UserID == upm.UserID)
+                            .Select(p =>
+                            {
+                                var key = new { upm.UserAssessmentMappingID, p.PillarID };
+
+                                evalLookup.TryGetValue(key, out var evals);
+                                evals ??= new List<EvaluationCityProgressResultDto>(); // replace with your actual type
+
+                                var totalScore = evals.Sum(x => x.TotalScore);
+                                var totalAns = evals.Sum(x => x.TotalAns);
+                                var totalCriticalAns = evals.Sum(x => x.TotalAnsweredCriticalQuestions);
+
+                                var avgTotalAns = evals.Any() ? evals.Average(x => x.TotalAns) : 0;
+                                var avgTotalCriAns = evals.Any() ? evals.Average(x => x.TotalAnsweredCriticalQuestions) : 0;
+
+                                return new AssignedAssessmentPillarMappingDto
+                                {
+                                    UserPillarMappingID = p.UserPillarMappingID,
+                                    UserID = p.UserID,
+                                    Year = p.Year,
+                                    DueDate = p.DueDate,
+                                    PillarID = p.PillarID,
+                                    PillarName = p.Pillar.PillarName,
+                                    Description = p.Pillar.Description,
+                                    DisplayOrder = p.Pillar.DisplayOrder,
+                                    ImagePath = p.Pillar.ImagePath,
+
+                                    // ✅ Calculated fields
+                                    TotalQuestions = p.Pillar.Questions.Count(q => !q.IsDeleted),
+
+                                    TotalAnsweredQuestions = (int)Math.Round(avgTotalAns, MidpointRounding.AwayFromZero),
+
+                                    TotalCriticalQuestions = p.Pillar.Questions.Count(q => !q.IsDeleted && q.IsCritical),
+
+                                    TotalCriticalAnsweredQuestions = (int)Math.Round(avgTotalCriAns, MidpointRounding.AwayFromZero),
+
+                                    CompletionRate = evals.Any()
+                                        ? evals.Average(x => x.CompletionRate)
+                                        : 0,
+
+                                    ScoreProgress = totalAns == 0
+                                        ? 0
+                                        : Math.Round((totalScore * 100m) / (totalAns * 4m), 2),
+
+                                    TotalScore = totalScore
+                                };
+                            })
+                            .OrderBy(p => p.DisplayOrder)
+                            .ToList()
+                    }).ToList();
+                }
+                var result = new List<GetExecutiveAssignedAssessmentResponseDto>();
+                foreach (var item in data)
+                {
+                    var pillars = item.UserPillarMappings ?? new List<AssignedAssessmentPillarMappingDto>();
+
+                    var pillarCount = pillars.Count;
+                    if (pillarCount == 0) pillarCount = 1;
+
+                    var totalScore = pillars.Sum(x => x.TotalScore);
+                    var totalScoreProgress = pillars.Sum(x => x.ScoreProgress);
+                    var totalAnswered = pillars.Sum(x => x.TotalAnsweredQuestions);
+                    var totalCriticalAnswered = pillars.Sum(x => x.TotalCriticalAnsweredQuestions);
+                    var totalQuestions = pillars.Sum(x => x.TotalQuestions);
+                    var totalCriticalQuestions = pillars.Sum(x => x.TotalCriticalQuestions);
+                    var totalCompletionRate = pillars.Sum(x => x.CompletionRate);
+
+                    var progress = totalQuestions == 0 ? 0 : (totalAnswered * 100m) / totalQuestions;
+
+                    // ✅ Time calculations
+                    var totalDays = (item.DueDate - item.UpdatedAt)?.Days ?? 0;
+                    var daysElapsed = (DateTime.UtcNow - item.UpdatedAt)?.Days ?? 0;
+                    if (totalDays <= 0) totalDays = 1;
+                    if (daysElapsed < 0) daysElapsed = 0;
+
+                    // ✅ Expected questions till today
+                    var expectedQuestions = (daysElapsed * totalQuestions) / totalDays;
+
+                    // clamp
+                    if (expectedQuestions > totalQuestions)
+                        expectedQuestions = totalQuestions;
+
+                    // ✅ Distribution logic
+                    var onTrackCount = Math.Min(totalAnswered, expectedQuestions);
+
+                    var offTrackCount = totalAnswered < expectedQuestions
+                        ? expectedQuestions - totalAnswered
+                        : 0;
+
+                    var atRiskCount = totalQuestions - (onTrackCount + offTrackCount);
+
+                    // ✅ Percentages
+                    decimal onTrackPercent = totalQuestions == 0 ? 0 : (onTrackCount * 100m) / totalQuestions;
+                    decimal offTrackPercent = totalQuestions == 0 ? 0 : (offTrackCount * 100m) / totalQuestions;
+                    decimal atRiskPercent = totalQuestions == 0 ? 0 : (atRiskCount * 100m) / totalQuestions;
+
+
+                    if (item.DueDate.HasValue && DateTime.UtcNow > item.DueDate)
+                    {
+                        onTrackCount = totalAnswered;
+                        offTrackCount = totalQuestions - totalAnswered;
+                        atRiskCount = 0;
+
+                        onTrackPercent = totalQuestions == 0 ? 0 : (onTrackCount * 100m) / totalQuestions;
+                        offTrackPercent = totalQuestions == 0 ? 0 : (offTrackCount * 100m) / totalQuestions;
+                        atRiskPercent = 0;
+                    }
+                    var daysRemaining = (item.DueDate - DateTime.UtcNow)?.Days ?? 0;
+
+                    var expected = totalDays == 0 ? 0 : (daysElapsed * 100m) / totalDays;
+
+                    string riskLevel;
+
+                    if (!item.DueDate.HasValue)
+                    {
+                        riskLevel = "On Track";
+                        daysRemaining = 0;
+                    }
+                    else if (DateTime.UtcNow > item.DueDate)
+                    {
+                        riskLevel = "Overdue";
+                    }
+                    else if (progress < expected && daysRemaining <= 3)
+                    {
+                        riskLevel = "High Risk";
+                    }
+                    else if (progress < expected)
+                    {
+                        riskLevel = "At Risk";
+                    }
+                    else if (daysRemaining <= 3)
+                    {
+                        riskLevel = "Due Soon";
+                    }
+                    else
+                    {
+                        riskLevel = "On Track";
+                    }
+
+
+                    // 🔥 Best / Worst based on CompletionRate
+                    var bestPillar = pillars
+                        .OrderByDescending(x => x.CompletionRate)
+                        .FirstOrDefault();
+
+                    var worstPillar = pillars
+                        .OrderBy(x => x.CompletionRate)
+                        .FirstOrDefault();
+
+                    result.Add(new GetExecutiveAssignedAssessmentResponseDto
+                    {
+                        UserAssessmentMappingID = item.UserAssessmentMappingID,
+                        UserID = item.UserID,
+                        Year = item.Year,
+                        DueDate = item.DueDate,
+                        UpdatedAt = item.UpdatedAt,
+
+                        AssignedBy = item.AssignedBy,
+                        GeographicReference = item.GeographicReference,
+
+                        AvgTotalScore = (int)Math.Round(totalScore / (decimal)pillarCount),
+
+                        TotalAnsweredQuestions = totalAnswered,
+
+                        TotalQuestions = totalQuestions,
+
+                        TotalCriticalAnsweredQuestions = totalCriticalAnswered,
+
+                        TotalCriticalQuestions = totalCriticalQuestions,
+
+                        AvgCompletionRate = pillars.Any() ? totalCompletionRate / (decimal)pillarCount: 0,
+
+                        AvgScoreProgress = totalAnswered == 0
+                            ? 0
+                            : (int)Math.Round(totalScoreProgress / (decimal)pillarCount),
+
+                        // ✅ BEST / WORST PILLAR
+                        BestPerformingPillar = bestPillar?.PillarName ?? "",
+                        WorstPerformingPillar = worstPillar?.PillarName ?? "",
+
+                        BestCompletionRate = bestPillar?.CompletionRate ?? 0,
+                        WorstCompletionRate = worstPillar?.CompletionRate ?? 0,
+                        RiskLevel = riskLevel,
+                        DaysRemaining = daysRemaining,
+                        Progress = Math.Round(progress, 2),
+                        OnTrackPercent =  Math.Round(onTrackPercent, 2),
+                        OffTrackPercent = Math.Round(offTrackPercent, 2),
+                        AtRiskPercent = Math.Round(atRiskPercent, 2),
+                    });
+                }
+                var orderedResult = result
+    .OrderBy(x => x.RiskLevel == "Overdue" ? 1 :
+                  x.RiskLevel == "High Risk" ? 2 :
+                  x.RiskLevel == "At Risk" ? 3 :
+                  x.RiskLevel == "Due Soon" ? 4 :
+                  5)
+    .ThenBy(x => x.DaysRemaining)
+    .ToList();
+
+                return ResultResponseDto<List<GetExecutiveAssignedAssessmentResponseDto>>
+                    .Success(orderedResult, new[] { "User Assessment fetched successfully" });
+            }
+            catch (Exception ex)
+            {
+                await _appLogger.LogAsync("GetExecutiveAssignedAssignedInvitations", ex);
+
+                return ResultResponseDto<List<GetExecutiveAssignedAssessmentResponseDto>>
+                    .Failure(new[] { "Error while fetching assigned assessments" });
+            }
+        }
+
+
+   
         public async Task<ResultResponseDto<AiCityPillarDashboardResponseDto>> GetDashboardPillarHistory(UserDashBoardRequstDto request, int userId, UserRole userRole)
         {
             try

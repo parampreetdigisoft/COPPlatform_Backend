@@ -274,6 +274,29 @@ namespace COPPlatform.Controllers
             return Ok(result);
         }
 
+
+        [HttpGet]
+        [Route("getExecutiveAssignedInvitations")]
+        [Authorize]
+        public async Task<IActionResult> GetExecutiveAssignedInvitations([FromQuery]string? searchText)
+        {
+            var userId = GetUserIdFromClaims();
+            if (userId == null)
+                return Unauthorized("User ID not found in token.");
+
+            var role = GetRoleFromClaims();
+            if (role == null)
+                return Unauthorized("You Don't have access.");
+
+            if (!Enum.TryParse<UserRole>(role, true, out var userRole))
+            {
+                return Unauthorized("You Don't have access.");
+            }
+            var result = await _responseService.GetExecutiveAssignedInvitations(userId.GetValueOrDefault(), userRole, searchText);
+            return Ok(result);
+        }
+
+
         /// <summary>
         /// This API is used to get the assessment pillar history 
         /// </summary>

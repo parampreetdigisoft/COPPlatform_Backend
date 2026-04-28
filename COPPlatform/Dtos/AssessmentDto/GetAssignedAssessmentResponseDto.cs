@@ -11,10 +11,11 @@ namespace COPPlatform.Dtos.AssessmentDto
         public DateTime? UpdatedAt { get; set; } = DateTime.UtcNow;
         public List<AssignedAssessmentPillarMappingDto>? UserPillarMappings { get; set; }
         public string AssignedBy { get; set; }
-        public string GeographicReference { get; set; }
+        public string GeographicReference { get; set; }    
+
     }
 
-    public class AssignedAssessmentPillarMappingDto
+    public class AssignedAssessmentPillarMappingDto :PillarInformationDTO
     {
         public int UserPillarMappingID { get; set; }
         public int Year { get; set; }
@@ -25,5 +26,20 @@ namespace COPPlatform.Dtos.AssessmentDto
         public string Description { get; set; }
         public int DisplayOrder { get; set; }
         public string ImagePath { get; set; }
+       
+    }
+
+    public class PillarInformationDTO
+    {
+        public int TotalScore { get; set; }
+        public int TotalAnsweredQuestions { get; set; }
+        public int TotalQuestions { get; set; }
+        public decimal ScoreProgress { get; set; }
+        public decimal CompletionRate { get; set; }
+
+        public int TotalCriticalQuestions { get; set; }
+
+        public int TotalCriticalAnsweredQuestions { get; set; }
+
     }
 }

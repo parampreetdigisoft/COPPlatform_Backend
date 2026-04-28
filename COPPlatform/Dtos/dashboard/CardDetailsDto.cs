@@ -24,7 +24,10 @@
 
         public EvaluatorCompletionSummaryDto? MinimumCompletionRateEvaluator { get; set; }
 
+        public List<RiskDetailDto> RiskDetails { get; set; } = new List<RiskDetailDto>();
 
+        public int TotalCriticalQuestions { get; set; }
+        public int TotalAnsweredCriticalQuestions { get; set; }        
 
     }
 
@@ -38,5 +41,16 @@
     {
         public string EvaluatorName { get; set; }
         public decimal CompletionRate { get; set; }
+    }
+
+    public class RiskDetailDto
+    {
+        public int MappingId { get; set; }
+        public string AssessmentName { get; set; }
+        public string OwnerName { get; set; }
+        public DateTime? DueDate { get; set; }
+        public decimal Progress { get; set; }
+        public string RiskLevel { get; set; }
+        public int DaysRemaining { get; set; }
     }
 }

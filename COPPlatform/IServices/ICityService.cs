@@ -26,6 +26,7 @@ namespace COPPlatform.IServices
         Task<ResultResponseDto<List<UserCityMappingResponseDto>>> GetAiAccessCity(int userId, UserRole userRole);
         Task<ResultResponseDto<byte[]>> ExportCities(int userId, UserRole userRole);
         Task<ResultResponseDto<CardDetailsDto>> GetCardDetails(int userID, UserRole userRole);
+        Task<ResultResponseDto<CardDetailsDto>> GetExecutiveCardDetails(int userID, UserRole userRole);
 
     }
 }

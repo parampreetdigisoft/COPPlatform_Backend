@@ -9,7 +9,7 @@ namespace COPPlatform.IServices
     public interface IAssessmentResponseService
     {
         Task<List<AssessmentResponse>> GetAllAsync();
-        Task<AssessmentResponse> GetByIdAsync(int id);
+        Task<AssessmentResponse?> GetByIdAsync(int id);
         Task<AssessmentResponse> AddAsync(AssessmentResponse response);
         Task<AssessmentResponse> UpdateAsync(int id, AssessmentResponse response);
         Task<bool> DeleteAsync(int id);
@@ -24,6 +24,7 @@ namespace COPPlatform.IServices
         Task<ResultResponseDto<AiCityPillarDashboardResponseDto>> GetCityPillarHistory(UserCityDashBoardRequstDto userCityRequstDto,int userID, UserRole userRole);
         Task<ResultResponseDto<List<GetAssignedAssessmentResponseDto>>> GetAssignedAssessments(int userID, UserRole userRole);
         Task<ResultResponseDto<List<GetAssignedAssessmentResponseDto>>> GetAssignedInvitations(int userID, UserRole userRole);
+        Task<ResultResponseDto<List<GetExecutiveAssignedAssessmentResponseDto>>> GetExecutiveAssignedInvitations(int userID, UserRole userRole, string? searchText);
         Task<ResultResponseDto<AiCityPillarDashboardResponseDto>> GetDashboardPillarHistory(UserDashBoardRequstDto request, int userId, UserRole userRole);
     }
 } 
