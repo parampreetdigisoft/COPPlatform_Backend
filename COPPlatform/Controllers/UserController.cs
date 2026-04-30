@@ -1,9 +1,11 @@
-using COPPlatform.Models;
-using COPPlatform.IServices;
-using System.Security.Claims;
-using Microsoft.AspNetCore.Mvc;
+using COPPlatform.Dtos.AssessmentDto;
+using COPPlatform.Dtos.EmailDto;
 using COPPlatform.Dtos.UserDtos;
+using COPPlatform.IServices;
+using COPPlatform.Models;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace COPPlatform.Controllers
 {
@@ -173,6 +175,30 @@ namespace COPPlatform.Controllers
                 return StatusCode(500, "User Invitation failed due to a server error.");
 
             return Ok(response);
+        }
+
+        [HttpGet]
+        [Route("getSendEmailLogs")]
+        [Authorize]
+        public async Task<IActionResult> GetSendEmailLogs([FromQuery] EmailLogRequestDto response)
+        {
+            var userId = GetUserIdFromClaims();
+            if (userId == null)
+                return Unauthorized("User ID not found in token.");
+
+            var role = GetRoleFromClaims();
+            if (role == null)
+                return Unauthorized("You Don't have access.");
+
+            if (!Enum.TryParse<UserRole>(role, true, out var userRole))
+            {
+                return Unauthorized("You Don't have access.");
+            }
+
+            response.UserId = userId.GetValueOrDefault();
+
+            var result = await _userService.GetEmailLogs(response, userRole, userId.Value);
+            return Ok(result);
         }
     }
 

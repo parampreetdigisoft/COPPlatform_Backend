@@ -5,6 +5,7 @@ using COPPlatform.Common.Models.settings;
 using COPPlatform.Data;
 using COPPlatform.Dtos.AssessmentDto;
 using COPPlatform.Dtos.CommonDto;
+using COPPlatform.Dtos.EmailDto;
 using COPPlatform.Dtos.UserDtos;
 using COPPlatform.IServices;
 using COPPlatform.Models;
@@ -511,50 +512,145 @@ namespace COPPlatform.Services
 
         public async Task<ResultResponseDto<bool>> SendEmail(SendEmailDto requestDto, UserRole userRole, int userID)
         {
+            var emailLog = new EmailLog();
+
             try
             {
-
-                var user = await _context.Users.FindAsync(userID);
+                var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(x => x.UserID == userID);
                 if (user == null)
                     return ResultResponseDto<bool>.Failure(new List<string>() { "Invalid request " });
 
-                var userAdmin = await _context.Users.FindAsync(1);
+                var userAdmin = await _context.Users.AsNoTracking().FirstOrDefaultAsync(x => x.UserID == 1);
                 if (userAdmin == null)
-                {
                     return ResultResponseDto<bool>.Failure(new List<string>() { "Invalid request " });
-                }
+
+                // Prepare log BEFORE sending
+                emailLog.SenderUserId = user.UserID;
+                emailLog.SenderEmail = user.Email;
+                emailLog.ReceiverEmail = userAdmin.Email;
+                emailLog.Subject = requestDto.EmailSubject;
+                emailLog.Message = requestDto.EmailMessage;                
+                emailLog.CreatedAt = DateTime.UtcNow;
+                emailLog.IsSent = false;
+
+                _context.EmailLogs.Add(emailLog);
+                await _context.SaveChangesAsync();
 
                 var emailModel = new EmailInvitationSendRequestDto
-                    {
-                        
-                        Title = "Executive Alert: Data Discrepancy Identified",
-                        ApiUrl = _appSettings.ApiUrl,
-                        UserName = user.FullName + " ("+ user.Email +")",
-                        MsgText = requestDto.EmailMessage,
-                        Mail = _appSettings.AdminMail,                        
-                    };
+                {
+                    Title = "Executive Alert: Data Discrepancy Identified",
+                    ApiUrl = _appSettings.ApiUrl,
+                    UserName = user.FullName + " (" + user.Email + ")",
+                    MsgText = requestDto.EmailMessage,
+                    Mail = _appSettings.AdminMail,
+                };
 
-                    var isMailSent = await _emailService.SendEmailAsync(userAdmin.Email, requestDto.EmailSubject,
-                        "~/Views/EmailTemplates/EvaluatorEmail.cshtml", emailModel
+                var isMailSent = await _emailService.SendEmailAsync(
+                    userAdmin.Email,
+                    requestDto.EmailSubject,
+                    "~/Views/EmailTemplates/EvaluatorEmail.cshtml",
+                    emailModel
+                );
+
+                // Update log AFTER sending
+                emailLog.IsSent = isMailSent;
+                emailLog.SentAt = DateTime.UtcNow;
+
+                if (!isMailSent)
+                {
+                    emailLog.ErrorMessage = "Email service returned failure";
+                }
+
+                await _context.SaveChangesAsync();
+
+                if (!isMailSent)
+                {
+                    return ResultResponseDto<bool>.Failure(
+                        new List<string>() { "Failed to send email confirmation. Please try again later." }
                     );
+                }
 
-                    if (!isMailSent)
-                    {
-                        return ResultResponseDto<bool>.Failure(new List<string>()
-                            { "Failed to send email confirmation. Please try again later." }
-                         );
-                    }                    
-                
-
-                // Update fields
-                
-
-                return ResultResponseDto<bool>.Success(isMailSent, new List<string> { "Updated successfully" });
+                return ResultResponseDto<bool>.Success(true, new List<string> { "Email sent successfully" });
             }
             catch (Exception ex)
             {
-                await _appLogger.LogAsync("Error Occure UpdateUser", ex);
-                return ResultResponseDto<bool>.Failure(new string[] { "There is an error please try later" });
+                emailLog.IsSent = false;
+                emailLog.ErrorMessage = ex.Message;
+                emailLog.CreatedAt = DateTime.UtcNow;
+
+                _context.EmailLogs.Add(emailLog);
+                await _context.SaveChangesAsync();
+
+                await _appLogger.LogAsync("Error Occurred SendEmail", ex);
+
+                return ResultResponseDto<bool>.Failure(
+                    new string[] { "There is an error please try later" }
+                );
+            }
+        }
+        public async Task<PaginationResponse<EmailLogResponseDto>> GetEmailLogs(EmailLogRequestDto request, UserRole userRole, int userID)
+        {
+            try
+            {
+                var query = _context.EmailLogs.AsQueryable();
+
+                // 🔍 Filters
+
+                if (request.SenderUserId.HasValue)
+                {
+                    query = query.Where(x => x.SenderUserId == request.SenderUserId.Value);
+                }
+
+                if (!string.IsNullOrEmpty(request.ReceiverEmail))
+                {
+                    query = query.Where(x => x.ReceiverEmail.Contains(request.ReceiverEmail));
+                }
+
+                if (request.IsSent.HasValue)
+                {
+                    query = query.Where(x => x.IsSent == request.IsSent.Value);
+                }
+
+                if (request.FromDate.HasValue)
+                {
+                    query = query.Where(x => x.CreatedAt >= request.FromDate.Value);
+                }
+
+                if (request.ToDate.HasValue)
+                {
+                    query = query.Where(x => x.CreatedAt <= request.ToDate.Value);
+                }
+
+                // 📊 Projection (like your DTO mapping)
+                var resultQuery = query
+                    .OrderByDescending(x => x.CreatedAt)
+                    .Select(x => new EmailLogResponseDto
+                    {
+                        Id = x.Id,
+                        SenderUserId = x.SenderUserId,
+                        SenderEmail = x.SenderEmail,
+                        ReceiverEmail = x.ReceiverEmail,
+                        Subject = x.Subject,
+                        Message = x.Message,                        
+                        IsSent = x.IsSent,
+                        ErrorMessage = x.ErrorMessage,
+                        CreatedAt = x.CreatedAt,
+                        SentAt = x.SentAt
+                    });
+
+                return await resultQuery.ApplyPaginationAsync(request);
+            }
+            catch (Exception ex)
+            {
+                await _appLogger.LogAsync("Error occurred in GetEmailLogs", ex);
+
+                return new PaginationResponse<EmailLogResponseDto>
+                {
+                    Data = new List<EmailLogResponseDto>(),
+                    PageNumber = request.PageNumber,
+                    PageSize = request.PageSize,
+                    TotalRecords = 0
+                };
             }
         }
 

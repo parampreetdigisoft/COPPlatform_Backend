@@ -1,6 +1,7 @@
 using COPPlatform.Common.Models;
 using COPPlatform.Dtos.AssessmentDto;
 using COPPlatform.Dtos.CommonDto;
+using COPPlatform.Dtos.EmailDto;
 using COPPlatform.Dtos.UserDtos;
 using COPPlatform.Models;
 
@@ -18,6 +19,8 @@ namespace COPPlatform.IServices
         Task<ResultResponseDto<string>> DeleteInvitation(DeleteInvitationDto request, UserRole userRole, int userId);
 
         Task<ResultResponseDto<bool>> SendEmail(SendEmailDto requestDto,UserRole userRole, int userID);
+
+        Task<PaginationResponse<EmailLogResponseDto>> GetEmailLogs(EmailLogRequestDto request, UserRole userRole, int userID);
 
     }
 } 

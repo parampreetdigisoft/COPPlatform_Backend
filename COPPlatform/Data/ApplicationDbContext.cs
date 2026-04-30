@@ -36,6 +36,7 @@ namespace COPPlatform.Data
         public DbSet<UserPillarMapping> UserPillarMappings { get; set; }
         public DbSet<AssessmentResponseHistory> AssessmentResponseHistories { get; set; }
         public DbSet<UserEvaluationPillarProgressResultDto> UserEvaluationPillarProgressResults { get; set; }
+        public DbSet<EmailLog> EmailLogs { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
