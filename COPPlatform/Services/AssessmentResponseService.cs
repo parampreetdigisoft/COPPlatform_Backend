@@ -1472,6 +1472,7 @@ namespace COPPlatform.Services
                                 {
                                     var totalScore = evals.Sum(x => x.TotalScore);
                                     var totalAns = evals.Sum(x => x.TotalAns);
+                                    var totalQuestions = evals.Sum(x => x.TotalQuestions);
                                     var totalCriticalAns = evals.Sum(x => x.TotalAnsweredCriticalQuestions);
                                     var avgTotalCriAns = evals.Any() ? evals.Average(x => x.TotalAnsweredCriticalQuestions) : 0;
                                     var avgTotalAns = evals.Any() ? evals.Average(x => x.TotalAns) : 0;
@@ -1486,7 +1487,7 @@ namespace COPPlatform.Services
                                         DisplayOrder = pillar.P.DisplayOrder,
 
                                         // ✅ SAFE calculation
-                                        ScoreProgress = totalAns == 0 ? 0 : Math.Round((totalScore * 100m) / (totalAns * 4m), 2),
+                                        ScoreProgress = totalAns == 0 ? 0 : Math.Round((totalScore * 100m) / (totalQuestions * 4m), 2),
 
                                         TotalAns = roundedTotalAns, // ✅ final rounded value
                                         TotalQuestions = pillar.TotalQuestions,
