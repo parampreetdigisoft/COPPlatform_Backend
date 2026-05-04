@@ -1,4 +1,5 @@
-﻿using COPPlatform.Backgroundjob;
+﻿using ClosedXML.Excel;
+using COPPlatform.Backgroundjob;
 using COPPlatform.Common.Implementation;
 using COPPlatform.Common.Interface;
 using COPPlatform.Common.Models;
@@ -9,7 +10,8 @@ using COPPlatform.Dtos.CommonDto;
 using COPPlatform.Dtos.dashboard;
 using COPPlatform.IServices;
 using COPPlatform.Models;
-using ClosedXML.Excel;
+using DocumentFormat.OpenXml.Spreadsheet;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
 
@@ -303,15 +305,25 @@ namespace COPPlatform.Services
                         Role = m.Role,
                         DueDate = m.DueDate,
 
-                        Score = responses
-                            .Where(r => r.Score.HasValue &&
-                                        (int)r.Score.Value <= (int)ScoreValue.Four)
-                            .Sum(r => (int?)r.Score) ?? 0,
+                        Score = (responses.Where(r => r.Score.HasValue && (int)r.Score.Value <= (int)ScoreValue.Four).Sum(r => (decimal)((int?)r.Score ?? 0)) * 100m),
+                                 
 
                         AssessmentPhase = a.AssessmentPhase,
                     };
+                              
 
-                return await query.ApplyPaginationAsync(request);
+                var result =  await query.ApplyPaginationAsync(request);
+
+                foreach (var item in result.Data)
+                {
+                    var listofPillars = await _context.UserPillarMappings.Where(x => x.UserAssessmentMappingID == item.UserAssessmentMappingID).Select(x => x.PillarID).Distinct().ToListAsync();
+
+                    var totalQuestions = await _context.Questions.Where(q => listofPillars.Contains(q.PillarID) && !q.IsDeleted).CountAsync();
+
+                    item.Score = totalQuestions == 0 ? 0 : Math.Round(item.Score / (totalQuestions * 4m), 2);
+
+                }
+                return result;
             }
             catch (Exception ex)
             {
@@ -322,7 +334,7 @@ namespace COPPlatform.Services
                     Data = new List<GetAssessmentResponseDto>(),
                     PageNumber = request.PageNumber,
                     PageSize = request.PageSize,
-                    TotalRecords = 0
+                    TotalRecords = 0    
                 };
             }
         }
@@ -1348,9 +1360,7 @@ namespace COPPlatform.Services
 
                         AvgCompletionRate = pillars.Any() ? totalCompletionRate / (decimal)pillarCount: 0,
 
-                        AvgScoreProgress = totalAnswered == 0
-                            ? 0
-                            : (int)Math.Round(totalScoreProgress / (decimal)pillarCount),
+                        AvgScoreProgress = totalAnswered == 0 ? 0 : Math.Round(totalScoreProgress / (decimal)pillarCount, 2),
 
                         // ✅ BEST / WORST PILLAR
                         BestPerformingPillar = bestPillar?.PillarName ?? "",
