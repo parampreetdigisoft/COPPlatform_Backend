@@ -1184,6 +1184,7 @@ namespace COPPlatform.Services
                                 evals ??= new List<EvaluationCityProgressResultDto>(); // replace with your actual type
 
                                 var totalScore = evals.Sum(x => x.TotalScore);
+                                var totalQuestions = evals.Sum(x => x.TotalQuestions);
                                 var totalAns = evals.Sum(x => x.TotalAns);
                                 var totalCriticalAns = evals.Sum(x => x.TotalAnsweredCriticalQuestions);
 
@@ -1217,7 +1218,7 @@ namespace COPPlatform.Services
 
                                     ScoreProgress = totalAns == 0
                                         ? 0
-                                        : Math.Round((totalScore * 100m) / (totalAns * 4m), 2),
+                                        : Math.Round((totalScore * 100m) / (totalQuestions * 4m), 2),
 
                                     TotalScore = totalScore
                                 };
