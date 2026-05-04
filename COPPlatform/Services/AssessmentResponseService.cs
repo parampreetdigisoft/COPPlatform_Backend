@@ -653,47 +653,81 @@ namespace COPPlatform.Services
             }
         }
 
-        public async Task<ResultResponseDto<GetAssessmentHistoryDto>> GetAssessmentProgressHistory(int assessmentID, int userID, UserRole userRole)
+        public async Task<ResultResponseDto<GetAssessmentHistoryDto>> GetAssessmentProgressHistory( int assessmentID, int userID, UserRole userRole)
         {
             try
             {
-                // Fetch assessment with pillars & responses in one query
-                var assessment = await _context.Assessments
-                    .Include(a => a.PillarAssessments)
-                        .ThenInclude(pa => pa.Responses)
-                    .FirstOrDefaultAsync(a => a.AssessmentID == assessmentID);
+                // Step 1: Get UserAssessmentMappingID first
+                var mappingId = await _context.Assessments
+                    .Where(a => a.AssessmentID == assessmentID)
+                    .Select(a => a.UserAssessmentMappingID)
+                    .FirstOrDefaultAsync();
 
-                if (assessment == null)
+                if (mappingId == 0)
                 {
-                    return ResultResponseDto<GetAssessmentHistoryDto>.Failure(new[] { "Failed to get assessment history" });
+                    return ResultResponseDto<GetAssessmentHistoryDto>
+                        .Failure(new[] { "Failed to get assessment history" });
                 }
 
-
+                // Step 2: Get accessible pillars
                 var accessPillars = await _context.UserPillarMappings
-                    .Where(x => x.UserAssessmentMappingID == assessment.UserAssessmentMappingID && x.UserID == userID && !x.IsDeleted && x.IsActive)
+                    .Where(x => x.UserAssessmentMappingID == mappingId
+                             && x.UserID == userID
+                             && !x.IsDeleted
+                             && x.IsActive)
                     .Select(x => x.PillarID)
                     .ToListAsync();
 
-                // Get total questions directly (avoid Include if not needed)
-                var totalQuestions = await _context.Questions.Where(x=> accessPillars.Contains(x.PillarID)).CountAsync();
+                if (!accessPillars.Any())
+                {
+                    return ResultResponseDto<GetAssessmentHistoryDto>
+                        .Success(new GetAssessmentHistoryDto
+                        {
+                            AssessmentID = assessmentID,
+                            Score = 0,
+                            TotalAnsPillar = 0,
+                            TotalPillar = 0,
+                            TotalAnsQuestion = 0,
+                            TotalQuestion = 0,
+                            CurrentProgress = 0
+                        }, new[] { "No accessible pillars found" });
+                }
 
-                // Calculate answered questions
-                var totalAnsweredQuestions = assessment.PillarAssessments
-                    .SelectMany(pa => pa.Responses)
+                // Step 3: Get filtered assessment data (ONLY allowed pillars)
+                var data = await _context.PillarAssessments
+                    .Where(pa => pa.AssessmentID == assessmentID
+                              && accessPillars.Contains(pa.PillarID))
+                    .Select(pa => new
+                    {
+                        pa.PillarID,
+                        Responses = pa.Responses
+                            .Where(r => r.Score.HasValue)
+                    })
+                    .ToListAsync();
+
+                // Step 4: Total questions (only accessible pillars)
+                var totalQuestions = await _context.Questions
+                    .Where(q => accessPillars.Contains(q.PillarID))
+                    .CountAsync();
+
+                // Step 5: Calculations
+                var totalAnsweredQuestions = data
+                    .SelectMany(p => p.Responses)
                     .Count();
 
-                // Calculate score (sum only valid scores <= Four)
-                var score = assessment.PillarAssessments
-                    .SelectMany(pa => pa.Responses)
-                    .Where(r => r.Score.HasValue && r.Score.Value <= ScoreValue.Four)
+                var score = data
+                    .SelectMany(p => p.Responses)
+                    .Where(r => r.Score!.Value <= ScoreValue.Four)
                     .Sum(r => (int)r.Score!.Value);
 
-                // Build response
+                var totalAnsweredPillars = data.Count(p => p.Responses.Any());
+
+                // Step 6: Build response
                 var result = new GetAssessmentHistoryDto
                 {
                     AssessmentID = assessmentID,
                     Score = score,
-                    TotalAnsPillar = assessment.PillarAssessments.Count,
+                    TotalAnsPillar = totalAnsweredPillars,
                     TotalPillar = accessPillars.Count,
                     TotalAnsQuestion = totalAnsweredQuestions,
                     TotalQuestion = totalQuestions,
@@ -702,13 +736,15 @@ namespace COPPlatform.Services
                         : 0
                 };
 
-                return ResultResponseDto<GetAssessmentHistoryDto>.Success(result, new[] { "Assessment history fetched successfully" });
+                return ResultResponseDto<GetAssessmentHistoryDto>
+                    .Success(result, new[] { "Assessment history fetched successfully" });
             }
             catch (Exception ex)
             {
                 await _appLogger.LogAsync("Error in GetAssessmentProgressHistory", ex);
-                return ResultResponseDto<GetAssessmentHistoryDto>.Failure(new[] { "Failed to get assessment history" });
 
+                return ResultResponseDto<GetAssessmentHistoryDto>
+                    .Failure(new[] { "Failed to get assessment history" });
             }
         }
 

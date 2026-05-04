@@ -524,7 +524,6 @@ namespace COPPlatform.Services
                 if (userAdmin == null)
                     return ResultResponseDto<bool>.Failure(new List<string>() { "Invalid request " });
 
-                // Prepare log BEFORE sending
                 emailLog.SenderUserId = user.UserID;
                 emailLog.SenderEmail = user.Email;
                 emailLog.ReceiverEmail = userAdmin.Email;
@@ -532,9 +531,7 @@ namespace COPPlatform.Services
                 emailLog.Message = requestDto.EmailMessage;                
                 emailLog.CreatedAt = DateTime.UtcNow;
                 emailLog.IsSent = false;
-
-                _context.EmailLogs.Add(emailLog);
-                await _context.SaveChangesAsync();
+                _context.EmailLogs.Add(emailLog);               
 
                 var emailModel = new EmailInvitationSendRequestDto
                 {
@@ -551,8 +548,6 @@ namespace COPPlatform.Services
                     "~/Views/EmailTemplates/EvaluatorEmail.cshtml",
                     emailModel
                 );
-
-                // Update log AFTER sending
                 emailLog.IsSent = isMailSent;
                 emailLog.SentAt = DateTime.UtcNow;
 
@@ -560,7 +555,6 @@ namespace COPPlatform.Services
                 {
                     emailLog.ErrorMessage = "Email service returned failure";
                 }
-
                 await _context.SaveChangesAsync();
 
                 if (!isMailSent)
@@ -569,7 +563,6 @@ namespace COPPlatform.Services
                         new List<string>() { "Failed to send email confirmation. Please try again later." }
                     );
                 }
-
                 return ResultResponseDto<bool>.Success(true, new List<string> { "Email sent successfully" });
             }
             catch (Exception ex)
