@@ -11,7 +11,7 @@ namespace COPPlatform.IServices
         Task<List<AssessmentResponse>> GetAllAsync();
         Task<AssessmentResponse?> GetByIdAsync(int id);
         Task<AssessmentResponse> AddAsync(AssessmentResponse response);
-        Task<AssessmentResponse> UpdateAsync(int id, AssessmentResponse response);
+        Task<AssessmentResponse?> UpdateAsync(int id, AssessmentResponse response);
         Task<bool> DeleteAsync(int id);
         Task<ResultResponseDto<string>> SaveAssessment(AddAssessmentDto request, int userID, UserRole userRole);
         Task<PaginationResponse<GetAssessmentResponseDto>> GetAssessmentResult(GetAssessmentRequestDto request, UserRole role);
