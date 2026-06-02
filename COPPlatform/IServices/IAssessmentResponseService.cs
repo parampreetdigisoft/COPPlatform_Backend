@@ -15,7 +15,7 @@ namespace COPPlatform.IServices
         Task<bool> DeleteAsync(int id);
         Task<ResultResponseDto<string>> SaveAssessment(AddAssessmentDto request, int userID, UserRole userRole);
         Task<PaginationResponse<GetAssessmentResponseDto>> GetAssessmentResult(GetAssessmentRequestDto request, UserRole role);
-        Task<PaginationResponse<GetAssessmentQuestionResponseDto>> GetAssessmentQuestion(GetAssessmentQuestionRequestDto request);
+        Task<PaginationResponse<GetAssessmentQuestionResponseDto>?> GetAssessmentQuestion(GetAssessmentQuestionRequestDto request);
         Task<ResultResponseDto<string>> ImportAssessmentAsync(IFormFile file,int userID, UserRole userRole);
         Task<GetCityQuestionHistoryReponseDto> GetCityQuestionHistory(UserCityRequstDto userCityRequstDto);
         Task<ResultResponseDto<GetAssessmentHistoryDto>> GetAssessmentProgressHistory(int assessmentID, int userID, UserRole userRole);

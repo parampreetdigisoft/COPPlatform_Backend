@@ -6,9 +6,9 @@ namespace COPPlatform.Dtos.AssessmentDto
     {
         public int AssessmentID { get; set; }
         public int UserID { get; set; }
-        public int PillerID { get; set; }
+        public int PillarID { get; set; }
         public string PillarName { get; set; }
-        public int QuestoinID { get; set; }
+        public int QuestionID { get; set; }
         public string QuestionText { get; set; }
         public string QuestionOptionText { get; set; }
         public string Justification { get; set; }

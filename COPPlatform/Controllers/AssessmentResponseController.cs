@@ -109,9 +109,9 @@ namespace COPPlatform.Controllers
             return Ok(result);
         }
         [HttpGet]
-        [Route("getAssessmentQuestoins")]
+        [Route("getAssessmentQuestions")]
         [Authorize]
-        public async Task<IActionResult> GetAssessmentQuestoins([FromQuery] GetAssessmentQuestionRequestDto response)
+        public async Task<IActionResult> GetAssessmentQuestions([FromQuery] GetAssessmentQuestionRequestDto response)
         {
             var result = await _responseService.GetAssessmentQuestion(response);
             return Ok(result);

@@ -336,7 +336,7 @@ namespace COPPlatform.Services
             }
         }
 
-        public async Task<PaginationResponse<GetAssessmentQuestionResponseDto>> GetAssessmentQuestion(GetAssessmentQuestionRequestDto request)
+        public async Task<PaginationResponse<GetAssessmentQuestionResponseDto>?> GetAssessmentQuestion(GetAssessmentQuestionRequestDto request)
         {
             try
             {
@@ -356,9 +356,9 @@ namespace COPPlatform.Services
                     .Select(r => new GetAssessmentQuestionResponseDto
                     {
                         AssessmentID = request.AssessmentID,
-                        PillerID = r.PillarAssessment.PillarID,
+                        PillarID = r.PillarAssessment.PillarID,
                         PillarName = r.Question.Pillar.PillarName,
-                        QuestoinID = r.QuestionID,
+                        QuestionID = r.QuestionID,
                         Score = r.Score,
                         UserID = user.UserID,
                         Justification = r.Justification,
