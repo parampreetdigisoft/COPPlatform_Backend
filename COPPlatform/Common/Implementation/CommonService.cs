@@ -99,9 +99,9 @@ namespace COPPlatform.Common.Implementation
         }
 
         public async Task<List<UserEvaluationPillarProgressResultDto>> GetUserProgressByAssessmentIdWeekly(
-      int userAssessmentMappingID,
-      List<string> periods
-  )
+              int userAssessmentMappingID,
+              List<string> periods
+        )
         {
             try
             {

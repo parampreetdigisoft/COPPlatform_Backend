@@ -1359,320 +1359,339 @@ namespace COPPlatform.Services
         {
             try
             {
+                Expression<Func<UserAssessmentMapping, bool>> predicate = x => !x.IsDeleted;
+
+                var data = await LoadAssessmentScoreDataAsync(predicate);
+                var pillars = await LoadPillarQuestionCountsAsync();
+                var (totalCritical, answeredCritical) = await GetCriticalQuestionStatsAsync();
+                var riskMetrics = await ComputeExecutiveRiskMetricsAsync(predicate);
+
                 var result = new CardDetailsDto();
+                await ApplyExecutiveUserCountsAsync(result, userID, userRole);
 
-                Expression<Func<UserAssessmentMapping, bool>> predicate;
+                var totalQuestions = pillars.Sum(p => p.QuestionCount);
 
-                
-                    predicate = x => !x.IsDeleted;
+                ApplyAssessmentCounts(result, data, totalQuestions);
+                ApplyPillarScoreSummary(result, CalculatePillarScores(data, pillars), pillars);
+                ApplyRiskMetrics(result, riskMetrics);
 
-                // STEP 1: Fetch data (safe LEFT JOIN)
-                var data = await (
-                    from uc in _context.UserAssessmentMappings.Where(predicate)
-                    join a in _context.Assessments.Where(x => x.IsActive)
-                        on uc.UserAssessmentMappingID equals a.UserAssessmentMappingID into gj
-                    from a in gj.DefaultIfEmpty()
-                    select new
-                    {
-                        uc.UserAssessmentMappingID,
+                result.TotalCriticalQuestions = totalCritical;
+                result.TotalAnsweredCriticalQuestions = answeredCritical;
 
-                        PillarAssessments = a.PillarAssessments
-                            .Where(pa => !pa.IsDeleted)
-                            .Select(pa => new
-                            {
-                                pa.PillarID,
-                                Responses = pa.Responses
-                                    .Where(r => !r.IsDeleted)
-                                    .Select(r => r.Score)
-                            })
-                    }
-                ).ToListAsync();
-
-                // STEP 2: Total Questions
-                var pillars = await _context.Pillars
-                    .Select(p => new
-                    {
-                        p.PillarID,
-                        p.PillarName,
-                        Questions = p.Questions.Where(x => !x.IsDeleted).Count()
-                    })
-                    .ToListAsync();
-
-                var totalQuestions = pillars.Select(x => x.Questions).Sum();
-                var criticalQuestions = await _context.Questions.Where(q => !q.IsDeleted && q.IsCritical).Select(q => new { q.QuestionID }).ToListAsync();
-
-                var criticalQuestionIds = criticalQuestions.Select(q => q.QuestionID).ToList();
-
-                var totalCriticalQuestions = criticalQuestionIds.Count;
-
-                var assessmentScores = new List<decimal>();
-                var pillarScores = new List<PillarCardDetailsDto>();
-
-                // STEP 3: Calculate scores
-                foreach (var item in data)
-                {
-                    var allResponses = item.PillarAssessments
-                        .SelectMany(p => p.Responses)
-                        .Select(x => ((int?)x) ?? 0)
-                        .ToList();
-
-                    var totalAnswers = allResponses.Count;
-                    var totalScore = allResponses.Sum();
-
-                    if (totalAnswers > 0)
-                    {
-                        var assessmentScore = (totalScore * 100m) / (totalAnswers * 4m);
-                        assessmentScores.Add(assessmentScore);
-                    }
-
-                    // Pillar-level score
-                    foreach (var pillar in item.PillarAssessments)
-                    {
-                        var pResponses = pillar.Responses.ToList();
-                        var pTotalAnswers = pResponses.Count;
-                        var pTotalScore = pResponses.Sum(x => (int?)x ?? 0);
-
-                        if (pTotalAnswers > 0)
-                        {
-                            var pScore = (pTotalScore * 100m) / (pTotalAnswers * 4m);
-
-                            var p = new PillarCardDetailsDto
-                            {
-                                PillarID = pillar.PillarID,
-                                Value = Math.Round(pScore, 2),
-                            };
-                            pillarScores.Add(p);
-                        }
-                    }
-                }
-
-                var answeredCriticalQuestions = await (from r in _context.AssessmentResponses join pa in _context.PillarAssessments
-                        on r.PillarAssessmentID equals pa.PillarAssessmentID join q in _context.Questions   on r.QuestionID equals q.QuestionID
-                    join a in _context.Assessments on pa.AssessmentID equals a.AssessmentID
-                    join m in _context.UserAssessmentMappings   on a.UserAssessmentMappingID equals m.UserAssessmentMappingID  where !r.IsDeleted &&
-                        !pa.IsDeleted &&!m.IsDeleted && q.IsCritical == true  select r.QuestionID).CountAsync();
-
-                // STEP 4: Assessment counts
-                result.TotalAssessments = data.Count;
-
-                result.TotalCompletedAssessments = data.Count(x =>
-                    x.PillarAssessments.SelectMany(p => p.Responses).Count() == totalQuestions);
-
-                result.TotalInProgressAssessments =
-                    result.TotalAssessments - result.TotalCompletedAssessments;
-
-                // STEP 5: Score Aggregation
-                if (pillarScores.Any())
-                {
-                    var pillarIdToName = pillars.ToDictionary(p => p.PillarID, p => p.PillarName);
-
-
-                    result.AveragePillarScore = pillarScores.Any() ? pillarScores.Average(x => x.Value) : 0;
-
-                    var maxPillar = pillarScores.OrderByDescending(x => x.Value).First();
-                    result.HighestPillarScore = new PillarCardDetailsDto
-                    {
-                        PillarID = maxPillar.PillarID,
-                        PillarName = pillarIdToName.ContainsKey(maxPillar.PillarID) ? pillarIdToName[maxPillar.PillarID] : "Unknown",
-                        Value = maxPillar.Value
-                    };
-
-                    var minPillar = pillarScores.OrderBy(x => x.Value).First();
-                    result.LowestPillarScore = new PillarCardDetailsDto
-                    {
-                        PillarID = minPillar.PillarID,
-                        PillarName = pillarIdToName.ContainsKey(minPillar.PillarID) ? pillarIdToName[minPillar.PillarID] : "Unknown",
-                        Value = minPillar.Value
-                    };
-                }
-
-
-                // STEP 6: User counts (Admin only)
-                if (userRole == UserRole.Admin || userRole== UserRole.Executive)
-                {
-                    var userCounts = await _context.Users
-                        .Where(u => !u.IsDeleted)
-                        .GroupBy(u => u.Role)
-                        .Select(g => new { Role = g.Key, Count = g.Count() })
-                        .ToListAsync();
-
-                    result.TotalExecutives = userCounts.FirstOrDefault(x => x.Role == UserRole.Executive)?.Count ?? 0;
-                    result.TotalAnalysts = userCounts.FirstOrDefault(x => x.Role == UserRole.Analyst)?.Count ?? 0;
-                    result.TotalEvaluators = userCounts.FirstOrDefault(x => x.Role == UserRole.Evaluator)?.Count ?? 0;
-                }
-                else if (userRole == UserRole.Analyst)
-                {
-                    var evaluatorCount = await _context.Users
-                        .Where(u => !u.IsDeleted &&
-                                    u.Role == UserRole.Evaluator &&
-                                    u.CreatedBy == userID)
-                        .CountAsync();
-
-                    result.TotalEvaluators = evaluatorCount;
-                }
-                // 1. Base mappings
-                var mappings = await _context.UserAssessmentMappings
-                 .Where(predicate)
-                .Select(x => new
-                {
-                    x.UserAssessmentMappingID,
-                    x.DueDate,
-                    x.UpdatedAt,
-                    AssessmentName = x.GeographicReference, // adjust if from another table
-                    OwnerName = x.User.FullName        // adjust navigation property
-                })
-                .ToListAsync();
-
-                var mappingIds = mappings.Select(x => x.UserAssessmentMappingID).ToList();
-
-                // 2. Pillars per mapping
-                var pillarData = await _context.Assessments
-                    .Where(a => a.IsActive && mappingIds.Contains(a.UserAssessmentMappingID))
-                    .SelectMany(a => a.PillarAssessments)
-                    .Where(pa => !pa.IsDeleted)
-                    .GroupBy(pa => pa.Assessment.UserAssessmentMappingID)
-                    .Select(g => new
-                    {
-                        MappingID = g.Key,
-                        Pillars = g.Select(x => x.PillarID).Distinct().ToList()
-                    })
-                    .ToListAsync();
-
-                var pillarDict = pillarData.ToDictionary(x => x.MappingID, x => x.Pillars);
-
-                // 3. Answered Questions
-                var answeredData = await _context.Assessments
-                    .Where(a => a.IsActive && mappingIds.Contains(a.UserAssessmentMappingID))
-                    .SelectMany(a => a.PillarAssessments)
-                    .SelectMany(pa => pa.Responses)
-                    .Where(r => !r.IsDeleted)
-                    .GroupBy(r => r.PillarAssessment.Assessment.UserAssessmentMappingID)
-                    .Select(g => new
-                    {
-                        MappingID = g.Key,
-                        Count = g.Select(x => x.QuestionID).Distinct().Count()
-                    })
-                    .ToListAsync();
-
-                var answeredDict = answeredData.ToDictionary(x => x.MappingID, x => x.Count);
-
-                // 4. Question count per pillar
-                var questionCounts = await _context.Questions
-                    .Where(q => !q.IsDeleted)
-                    .GroupBy(q => q.PillarID)
-                    .Select(g => new { PillarID = g.Key, Count = g.Count() })
-                    .ToDictionaryAsync(x => x.PillarID, x => x.Count);
-
-
-                int overdue = 0, highRisk = 0, atRisk = 0, dueSoon = 0, onTrack = 0;
-                var riskDetails = new List<RiskDetailDto>();
-                foreach (var m in mappings)
-                {
-                    if (!m.DueDate.HasValue)
-                    {
-                        onTrack++;
-
-                        riskDetails.Add(new RiskDetailDto
-                        {
-                            MappingId = m.UserAssessmentMappingID,
-                            AssessmentName = m.AssessmentName,
-                            OwnerName = m.OwnerName,
-                            DueDate = null,
-                            Progress = 0,
-                            RiskLevel = "On Track",
-                            DaysRemaining = 0
-                        });
-
-                        continue;
-                    }
-
-                    var pillarsList = pillarDict.ContainsKey(m.UserAssessmentMappingID)
-                        ? pillarDict[m.UserAssessmentMappingID]
-                        : new List<int>();
-
-                    var totalQ = pillarsList.Sum(p => questionCounts.ContainsKey(p) ? questionCounts[p] : 0);
-
-                    var answered = answeredDict.ContainsKey(m.UserAssessmentMappingID)
-                        ? answeredDict[m.UserAssessmentMappingID]
-                        : 0;
-
-                    var totalDays = (m.DueDate - m.UpdatedAt)?.Days ?? 0;
-                    var daysElapsed = (DateTime.UtcNow - m.UpdatedAt)?.Days ?? 0;
-                    var daysRemaining = (m.DueDate - DateTime.UtcNow)?.Days ?? 0;
-
-                    var progress = totalQ == 0 ? 0 : (answered * 100m) / totalQ;
-                    var expected = totalDays == 0 ? 0 : (daysElapsed * 100m) / totalDays;
-
-                    string riskLevel;
-
-                    if (DateTime.UtcNow > m.DueDate)
-                    {
-                        overdue++;
-                        riskLevel = "Overdue";
-                    }
-                    else if (progress < expected && daysRemaining <= 3)
-                    {
-                        highRisk++;
-                        riskLevel = "High Risk";
-                    }
-                    else if (progress < expected)
-                    {
-                        atRisk++;
-                        riskLevel = "At Risk";
-                    }
-                    else if (daysRemaining <= 3)
-                    {
-                        dueSoon++;
-                        riskLevel = "Due Soon";
-                    }
-                    else
-                    {
-                        onTrack++;
-                        riskLevel = "On Track";
-                    }
-
-                    // 🔥 ADD DETAIL ENTRY
-                    riskDetails.Add(new RiskDetailDto
-                    {
-                        MappingId = m.UserAssessmentMappingID,
-                        AssessmentName = m.AssessmentName,
-                        OwnerName = m.OwnerName,
-                        DueDate = m.DueDate,
-                        Progress = Math.Round(progress, 2),
-                        RiskLevel = riskLevel,
-                        DaysRemaining = daysRemaining
-                    });
-                }
-
-                // 🔥 SORT FOR UI (VERY IMPORTANT)
-                var orderedRiskDetails = riskDetails
-                    .OrderBy(r => r.RiskLevel == "Overdue" ? 1 :
-                                  r.RiskLevel == "High Risk" ? 2 :
-                                  r.RiskLevel == "At Risk" ? 3 :
-                                  r.RiskLevel == "Due Soon" ? 4 : 5)
-                    .ThenBy(r => r.DaysRemaining)
-                    .ToList();
-
-                result.TotalOverdue = overdue;
-                result.TotalHighRisk = highRisk;
-                result.TotalAtRisk = atRisk;
-                result.TotalDueSoon = dueSoon;
-                result.TotalOnTrack = onTrack;
-                result.RiskDetails = orderedRiskDetails;
-                result.TotalCriticalQuestions = totalCriticalQuestions;
-                result.TotalAnsweredCriticalQuestions = answeredCriticalQuestions;
-
-
-                return ResultResponseDto<CardDetailsDto>.Success(result,
-                        new List<string> { "Card details fetched successfully" });
+                return ResultResponseDto<CardDetailsDto>.Success(
+                    result,
+                    new List<string> { "Card details fetched successfully" });
             }
             catch (Exception ex)
             {
-                await _appLogger.LogAsync("Error occurred in GetCardDetails", ex);
+                await _appLogger.LogAsync("Error occurred in GetExecutiveCardDetails", ex);
                 return ResultResponseDto<CardDetailsDto>.Failure(
                     new[] { "There was an error. Please try again later." });
             }
         }
+
+        #region Executive card details helpers
+
+        private async Task<List<AssessmentScoreRow>> LoadAssessmentScoreDataAsync(
+            Expression<Func<UserAssessmentMapping, bool>> predicate)
+        {
+            return await (
+                from uc in _context.UserAssessmentMappings.Where(predicate)
+                join a in _context.Assessments.Where(x => x.IsActive)
+                    on uc.UserAssessmentMappingID equals a.UserAssessmentMappingID into gj
+                from a in gj.DefaultIfEmpty()
+                select new AssessmentScoreRow
+                {
+                    UserAssessmentMappingID = uc.UserAssessmentMappingID,
+                    PillarAssessments = a.PillarAssessments
+                        .Where(pa => !pa.IsDeleted)
+                        .Select(pa => new PillarAssessmentScoreRow
+                        {
+                            PillarID = pa.PillarID,
+                            Responses = pa.Responses
+                                .Where(r => !r.IsDeleted)
+                                .Select(r => r.Score)
+                        })
+                }
+            ).ToListAsync();
+        }
+
+        private async Task<List<PillarQuestionCountRow>> LoadPillarQuestionCountsAsync()
+        {
+            return await _context.Pillars
+                .Select(p => new PillarQuestionCountRow
+                {
+                    PillarID = p.PillarID,
+                    PillarName = p.PillarName,
+                    QuestionCount = p.Questions.Count(x => !x.IsDeleted)
+                })
+                .ToListAsync();
+        }
+
+        private async Task<(int Total, int Answered)> GetCriticalQuestionStatsAsync()
+        {
+            var total = await _context.Questions
+                .CountAsync(q => !q.IsDeleted && q.IsCritical);
+
+            var answered = await (
+                from r in _context.AssessmentResponses
+                join pa in _context.PillarAssessments on r.PillarAssessmentID equals pa.PillarAssessmentID
+                join q in _context.Questions on r.QuestionID equals q.QuestionID
+                join a in _context.Assessments on pa.AssessmentID equals a.AssessmentID
+                join m in _context.UserAssessmentMappings on a.UserAssessmentMappingID equals m.UserAssessmentMappingID
+                where !r.IsDeleted && !pa.IsDeleted && !m.IsDeleted && q.IsCritical
+                select r.QuestionID
+            ).CountAsync();
+
+            return (total, answered);
+        }
+
+        private static void ApplyAssessmentCounts(
+            CardDetailsDto result,
+            IReadOnlyList<AssessmentScoreRow> data,
+            int totalQuestions)
+        {
+            result.TotalAssessments = data.Count;
+            result.TotalCompletedAssessments = data.Count(x =>
+                x.PillarAssessments.SelectMany(p => p.Responses).Count() == totalQuestions);
+            result.TotalInProgressAssessments =
+                result.TotalAssessments - result.TotalCompletedAssessments;
+        }
+
+        private static List<PillarCardDetailsDto> CalculatePillarScores(IEnumerable<AssessmentScoreRow> data, List<PillarQuestionCountRow> pillars)
+        {
+            var pillarScores = new List<PillarCardDetailsDto>();
+
+            foreach (var item in data)
+            {
+                foreach (var pillar in item.PillarAssessments)
+                {
+                    var scores = pillar.Responses.Select(x => x.HasValue ? (int)x.Value : 0).ToList();
+                    if (scores.Count == 0)
+                        continue;
+
+                    var questionCount = pillars.FirstOrDefault(x => x.PillarID == pillar.PillarID)?.QuestionCount ?? 1;
+
+                    var pScore = (scores.Sum() * 100m) / (questionCount * 4m);
+                    pillarScores.Add(new PillarCardDetailsDto
+                    {
+                        PillarID = pillar.PillarID,
+                        Value = Math.Round(pScore, 2)
+                    });
+                }
+            }
+
+            return pillarScores;
+        }
+
+        private static void ApplyPillarScoreSummary(
+            CardDetailsDto result,
+            List<PillarCardDetailsDto> pillarScores,
+            List<PillarQuestionCountRow> pillars)
+        {
+            if (pillarScores.Count == 0)
+                return;
+
+            var pillarIdToName = pillars.ToDictionary(p => p.PillarID, p => p.PillarName);
+            result.AveragePillarScore = pillarScores.Average(x => x.Value);
+
+            var maxPillar = pillarScores.MaxBy(x => x.Value)!;
+            var minPillar = pillarScores.MinBy(x => x.Value)!;
+
+            result.HighestPillarScore = ToPillarCardDetails(maxPillar, pillarIdToName);
+            result.LowestPillarScore = ToPillarCardDetails(minPillar, pillarIdToName);
+        }
+
+        private static PillarCardDetailsDto ToPillarCardDetails(
+            PillarCardDetailsDto pillar,
+            Dictionary<int, string> pillarIdToName) =>
+            new()
+            {
+                PillarID = pillar.PillarID,
+                PillarName = pillarIdToName.GetValueOrDefault(pillar.PillarID, "Unknown"),
+                Value = pillar.Value
+            };
+
+        private async Task ApplyExecutiveUserCountsAsync(CardDetailsDto result, int userID, UserRole userRole)
+        {
+            if (userRole is UserRole.Admin or UserRole.Executive)
+            {
+                var userCounts = await _context.Users
+                    .Where(u => !u.IsDeleted)
+                    .GroupBy(u => u.Role)
+                    .Select(g => new { Role = g.Key, Count = g.Count() })
+                    .ToListAsync();
+
+                result.TotalExecutives = userCounts.FirstOrDefault(x => x.Role == UserRole.Executive)?.Count ?? 0;
+                result.TotalAnalysts = userCounts.FirstOrDefault(x => x.Role == UserRole.Analyst)?.Count ?? 0;
+                result.TotalEvaluators = userCounts.FirstOrDefault(x => x.Role == UserRole.Evaluator)?.Count ?? 0;
+            }
+            else if (userRole == UserRole.Analyst)
+            {
+                result.TotalEvaluators = await _context.Users
+                    .Where(u => !u.IsDeleted && u.Role == UserRole.Evaluator && u.CreatedBy == userID)
+                    .CountAsync();
+            }
+        }
+
+        private async Task<ExecutiveRiskMetrics> ComputeExecutiveRiskMetricsAsync(
+            Expression<Func<UserAssessmentMapping, bool>> predicate)
+        {
+            var mappings = await _context.UserAssessmentMappings
+                .Where(predicate)
+                .Select(x => new RiskMappingRow
+                {
+                    UserAssessmentMappingID = x.UserAssessmentMappingID,
+                    DueDate = x.DueDate,
+                    UpdatedAt = x.UpdatedAt,
+                    AssessmentName = x.GeographicReference,
+                    OwnerName = x.User.FullName
+                })
+                .ToListAsync();
+
+            var mappingIds = mappings.Select(x => x.UserAssessmentMappingID).ToList();
+            if (mappingIds.Count == 0)
+                return new ExecutiveRiskMetrics();
+
+            var pillarData = await _context.Assessments
+                .Where(a => a.IsActive && mappingIds.Contains(a.UserAssessmentMappingID))
+                .SelectMany(a => a.PillarAssessments)
+                .Where(pa => !pa.IsDeleted)
+                .GroupBy(pa => pa.Assessment.UserAssessmentMappingID)
+                .Select(g => new { MappingID = g.Key, Pillars = g.Select(x => x.PillarID).Distinct().ToList() })
+                .ToListAsync();
+
+            var answeredData = await _context.Assessments
+                .Where(a => a.IsActive && mappingIds.Contains(a.UserAssessmentMappingID))
+                .SelectMany(a => a.PillarAssessments)
+                .SelectMany(pa => pa.Responses)
+                .Where(r => !r.IsDeleted)
+                .GroupBy(r => r.PillarAssessment.Assessment.UserAssessmentMappingID)
+                .Select(g => new { MappingID = g.Key, Count = g.Select(x => x.QuestionID).Distinct().Count() })
+                .ToListAsync();
+
+            var questionCounts = await _context.Questions
+                .Where(q => !q.IsDeleted)
+                .GroupBy(q => q.PillarID)
+                .Select(g => new { PillarID = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.PillarID, x => x.Count);
+
+            var pillarDict = pillarData.ToDictionary(x => x.MappingID, x => x.Pillars);
+            var answeredDict = answeredData.ToDictionary(x => x.MappingID, x => x.Count);
+
+            return BuildExecutiveRiskMetrics(mappings, pillarDict, answeredDict, questionCounts);
+        }
+
+        private static ExecutiveRiskMetrics BuildExecutiveRiskMetrics(
+            List<RiskMappingRow> mappings,
+            Dictionary<int, List<int>> pillarDict,
+            Dictionary<int, int> answeredDict,
+            Dictionary<int, int> questionCounts)
+        {
+            var metrics = new ExecutiveRiskMetrics();
+            var utcNow = DateTime.UtcNow;
+
+            foreach (var m in mappings)
+            {
+                if (!m.DueDate.HasValue)
+                {
+                    metrics.OnTrack++;
+                    metrics.Details.Add(new RiskDetailDto
+                    {
+                        MappingId = m.UserAssessmentMappingID,
+                        AssessmentName = m.AssessmentName,
+                        OwnerName = m.OwnerName,
+                        DueDate = null,
+                        Progress = 0,
+                        RiskLevel = "On Track",
+                        DaysRemaining = 0
+                    });
+                    continue;
+                }
+
+                var pillarsList = pillarDict.GetValueOrDefault(m.UserAssessmentMappingID, new List<int>());
+                var totalQ = pillarsList.Sum(p => questionCounts.GetValueOrDefault(p, 0));
+                var answered = answeredDict.GetValueOrDefault(m.UserAssessmentMappingID, 0);
+
+                var totalDays = (m.DueDate - m.UpdatedAt)?.Days ?? 0;
+                var daysElapsed = (utcNow - m.UpdatedAt)?.Days ?? 0;
+                var daysRemaining = (m.DueDate - utcNow)?.Days ?? 0;
+
+                var progress = totalQ == 0 ? 0 : (answered * 100m) / totalQ;
+                var expected = totalDays == 0 ? 0 : (daysElapsed * 100m) / totalDays;
+                var riskLevel = ClassifyRiskLevel(utcNow, m.DueDate, progress, expected, daysRemaining);
+
+                IncrementRiskBucket(metrics, riskLevel);
+                metrics.Details.Add(new RiskDetailDto
+                {
+                    MappingId = m.UserAssessmentMappingID,
+                    AssessmentName = m.AssessmentName,
+                    OwnerName = m.OwnerName,
+                    DueDate = m.DueDate,
+                    Progress = Math.Round(progress, 2),
+                    RiskLevel = riskLevel,
+                    DaysRemaining = daysRemaining
+                });
+            }
+
+            metrics.Details = metrics.Details
+                .OrderBy(r => RiskLevelSortKey(r.RiskLevel))
+                .ThenBy(r => r.DaysRemaining)
+                .ToList();
+
+            return metrics;
+        }
+
+        private static string ClassifyRiskLevel(
+            DateTime utcNow,
+            DateTime? dueDate,
+            decimal progress,
+            decimal expected,
+            int daysRemaining)
+        {
+            if (utcNow > dueDate)
+                return "Overdue";
+            if (progress < expected && daysRemaining <= 3)
+                return "High Risk";
+            if (progress < expected)
+                return "At Risk";
+            if (daysRemaining <= 3)
+                return "Due Soon";
+            return "On Track";
+        }
+
+        private static void IncrementRiskBucket(ExecutiveRiskMetrics metrics, string riskLevel)
+        {
+            switch (riskLevel)
+            {
+                case "Overdue": metrics.Overdue++; break;
+                case "High Risk": metrics.HighRisk++; break;
+                case "At Risk": metrics.AtRisk++; break;
+                case "Due Soon": metrics.DueSoon++; break;
+                default: metrics.OnTrack++; break;
+            }
+        }
+
+        private static int RiskLevelSortKey(string riskLevel) => riskLevel switch
+        {
+            "Overdue" => 1,
+            "High Risk" => 2,
+            "At Risk" => 3,
+            "Due Soon" => 4,
+            _ => 5
+        };
+
+        private static void ApplyRiskMetrics(CardDetailsDto result, ExecutiveRiskMetrics metrics)
+        {
+            result.TotalOverdue = metrics.Overdue;
+            result.TotalHighRisk = metrics.HighRisk;
+            result.TotalAtRisk = metrics.AtRisk;
+            result.TotalDueSoon = metrics.DueSoon;
+            result.TotalOnTrack = metrics.OnTrack;
+            result.RiskDetails = metrics.Details;
+        }
+
+        #endregion
 
         #endregion
     }
