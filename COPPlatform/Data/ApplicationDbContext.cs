@@ -37,6 +37,7 @@ namespace COPPlatform.Data
         public DbSet<AssessmentResponseHistory> AssessmentResponseHistories { get; set; }
         public DbSet<UserEvaluationPillarProgressResultDto> UserEvaluationPillarProgressResults { get; set; }
         public DbSet<EmailLog> EmailLogs { get; set; }
+        public DbSet<AnalyticalLayerSPResult> AnalyticalLayerSPResults { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -94,10 +95,6 @@ namespace COPPlatform.Data
             {
                 entity.HasKey(al => al.LayerID);
 
-                entity.HasMany(al=>al.AnalyticalLayerResults)
-                .WithOne(x=>x.AnalyticalLayer)
-                .HasForeignKey(x=>x.LayerID);
-
                 entity.HasMany(al => al.FiveLevelInterpretations)
                .WithOne(x => x.AnalyticalLayer)
                .HasForeignKey(x => x.LayerID);
@@ -136,10 +133,10 @@ namespace COPPlatform.Data
 
             modelBuilder.Entity<EvaluationCityProgressResultDto>().HasNoKey().ToView(null); 
             modelBuilder.Entity<GetCitiesProgressAdminDto>().HasNoKey().ToView(null); 
-            modelBuilder.Entity<UserEvaluationPillarProgressResultDto>().HasNoKey().ToView(null); 
+            modelBuilder.Entity<UserEvaluationPillarProgressResultDto>().HasNoKey().ToView(null);
+            modelBuilder.Entity<AnalyticalLayerSPResult>().HasNoKey();
 
-
-            base.OnModelCreating(modelBuilder);
+            base.OnModelCreating(modelBuilder); 
         }
 
     }

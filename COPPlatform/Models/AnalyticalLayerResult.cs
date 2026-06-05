@@ -24,4 +24,16 @@
         public AnalyticalLayer AnalyticalLayer { get; set; } = new();
         public City? City { get; set; }
     }
+
+    public class AnalyticalLayerSPResult
+    {
+        public int LayerID { get; set; }
+        public int UserAssessmentMappingID { get; set; }
+        public int? PillarID { get; set; }
+        public string? PillarName { get; set; }
+        public int InterpretationID { get; set; }
+        public string? GeographicReference { get; set; }
+        public decimal? CalValue { get; set; }
+        public int TotalRecords { get; set; }
+    }
 }

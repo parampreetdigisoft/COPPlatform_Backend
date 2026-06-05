@@ -9,7 +9,8 @@ namespace COPPlatform.IServices
 {
     public interface IKpiService
     {
-        Task<PaginationResponse<GetAnalyticalLayerResultDto>> GetAnalyticalLayerResults(GetAnalyticalLayerRequestDto request, int userId, UserRole role, TieredAccessPlan userPlan = TieredAccessPlan.Pending);
+        Task<PaginationResponse<GetAnalyticalLayerResultDto>> GetAnalyticalLayerResults(GetAnalyticalLayerRequestDto request, int userId, UserRole role);
+        Task<ResultResponseDto<GetKpiLayerChartResponseDto>> GetKpiLayerChart(GetKpiLayerChartRequestDto request, int userId, UserRole role);
         Task<ResultResponseDto<List<AnalyticalLayer>>> GetAllKpi();
         Task<ResultResponseDto<CompareCityResponseDto>> CompareCities(CompareCityRequestDto c, int userId, UserRole role);
         Task<ResultResponseDto<GetMutiplekpiLayerResultsDto>> GetMutiplekpiLayerResults(GetMutiplekpiLayerRequestDto request, int userId, UserRole role, TieredAccessPlan userPlan = TieredAccessPlan.Pending);

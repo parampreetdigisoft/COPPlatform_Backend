@@ -55,16 +55,7 @@ namespace COPPlatform.Controllers
                 return Unauthorized("You Don't have access.");
             }
 
-            var tierName = GetTierFromClaims();
-            if (tierName == null && userRole == UserRole.Executive)
-                return Unauthorized("You Don't have access.");
-
-            if (!Enum.TryParse<TieredAccessPlan>(tierName, true, out var userPlan) && userRole == UserRole.Executive)
-            {
-                return Unauthorized("You Don't have access.");
-            }
-
-            var result = await _kpiService.GetAnalyticalLayerResults(response, userId.GetValueOrDefault(), userRole, userPlan);
+            var result = await _kpiService.GetAnalyticalLayerResults(response, userId.GetValueOrDefault(), userRole);
             if (result == null)
             {
                 return Unauthorized("You Don't have access.");
@@ -77,6 +68,25 @@ namespace COPPlatform.Controllers
         public async Task<IActionResult> GetAllKpi()
         {
             var result = await _kpiService.GetAllKpi();
+            return Ok(result);
+        }
+
+        [HttpPost]
+        [Route("GetKpiLayerChart")]
+        public async Task<IActionResult> GetKpiLayerChart([FromBody] GetKpiLayerChartRequestDto request)
+        {
+            var userId = GetUserIdFromClaims();
+            if (userId == null)
+                return Unauthorized("User ID not found in token.");
+
+            var role = GetRoleFromClaims();
+            if (role == null)
+                return Unauthorized("You Don't have access.");
+
+            if (!Enum.TryParse<UserRole>(role, true, out var userRole))
+                return Unauthorized("You Don't have access.");
+
+            var result = await _kpiService.GetKpiLayerChart(request, userId.GetValueOrDefault(), userRole);
             return Ok(result);
         }
 

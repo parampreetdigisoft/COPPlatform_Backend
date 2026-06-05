@@ -3,6 +3,7 @@ using COPPlatform.Data;
 using COPPlatform.Dtos.CityDto;
 using COPPlatform.Dtos.PillarDto;
 using COPPlatform.IServices;
+using COPPlatform.Models;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
@@ -24,7 +25,33 @@ namespace COPPlatform.Common.Implementation
             _env = env;
         }
         #endregion
-
+        
+        public async Task<List<AnalyticalLayerSPResult>> GetAnalyticalLayerResultsAsync(
+            int userId, int role, int userAssessmentMappingId = 0,
+            int pageNumber = 1, int pageSize = 14, int layerId = 0, string search = "")
+        {
+            try
+            {
+                return await _context.AnalyticalLayerSPResults
+                    .FromSqlRaw(
+                        "EXEC usp_GetAnalyticalLayerResults @UserID, @Role, @UserAssessmentMappingID, @PageNumber, @PageSize, @LayerID, @Search",
+                        new SqlParameter("@UserID", userId),
+                        new SqlParameter("@Role", role),
+                        new SqlParameter("@UserAssessmentMappingID", userAssessmentMappingId),
+                        new SqlParameter("@PageNumber", pageNumber),
+                        new SqlParameter("@PageSize", pageSize),
+                        new SqlParameter("@LayerID", layerId),
+                        new SqlParameter("@Search", search ?? string.Empty)
+                    )
+                    .AsNoTracking()
+                    .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                await _appLogger.LogAsync("Error in Executing usp_GetAnalyticalLayerResults", ex);
+                return new List<AnalyticalLayerSPResult>();
+            }
+        }
         public async Task<List<EvaluationCityProgressResultDto>> GetCitiesProgressAsync(int userId, int role, int year)
         {
             try

@@ -853,7 +853,7 @@ namespace COPPlatform.Services
                 // Step 2: Get all selected cities (even if no analytical data)
                 var selectedCities = await _context.PublicUserCityMappings
                     .Include(x=>x.City)
-                    .Where(x => c.Cities.Contains(x.CityID) && x.UserID== userId && x.IsActive && x.City != null && x.City.IsActive)
+                    .Where(x =>  x.UserID== userId && x.IsActive && x.City != null && x.City.IsActive)
                     .Select(x => new { x.City.CityID, x.City.CityName })
                     .ToListAsync();
 
@@ -865,7 +865,7 @@ namespace COPPlatform.Services
                 // Step 3: Fetch analytical layer results for selected cities
                 var analyticalResults = await _context.AnalyticalLayerResults
                     .Include(ar => ar.AnalyticalLayer)
-                    .Where(x => c.Cities.Contains(x.CityID) &&
+                    .Where(x => 
                                 ((x.LastUpdated >= startDate && x.LastUpdated < endDate) || (x.AiLastUpdated >= startDate && x.AiLastUpdated < endDate))
                                 && validKpiIds.Contains(x.LayerID))
                     .Select(ar => new

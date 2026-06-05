@@ -5,8 +5,7 @@ namespace COPPlatform.Dtos.kpiDto
 {
     public class GetAnalyticalLayerRequestDto : PaginationRequest
     {
-        public int? CityID { get; set; }
+        public int UserAssessmentMappingID { get; set; }
         public int? LayerID { get; set; }
-        public int Year { get; set; } = DateTime.UtcNow.Year;
     }
 }
