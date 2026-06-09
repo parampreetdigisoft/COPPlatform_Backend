@@ -52,6 +52,27 @@ namespace COPPlatform.Common.Implementation
                 return new List<AnalyticalLayerSPResult>();
             }
         }
+        public async Task<List<PillarAssessmentProgressResult>> GetPillarAssessmentProgressResults(int userId, int role, int userAssessmentMappingId = 0)
+
+        {
+            try
+            {
+                return await _context.PillarAssessmentProgressResults
+                    .FromSqlRaw(
+                        "EXEC usp_getPillarAssessmentProgressByUserId @UserID, @Role, @UserAssessmentMappingID",
+                        new SqlParameter("@UserID", userId),
+                        new SqlParameter("@Role", role),
+                        new SqlParameter("@UserAssessmentMappingID", userAssessmentMappingId)
+                    )
+                    .AsNoTracking()
+                    .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                await _appLogger.LogAsync("Error in Executing usp_GetAnalyticalLayerResults", ex);
+                return new List<PillarAssessmentProgressResult>();
+            }
+        }
         public async Task<List<EvaluationCityProgressResultDto>> GetCitiesProgressAsync(int userId, int role, int year)
         {
             try

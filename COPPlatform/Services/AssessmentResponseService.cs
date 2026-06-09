@@ -258,13 +258,7 @@ namespace COPPlatform.Services
             {
                 // Base mapping query
                 var mappingQuery = _context.UserAssessmentMappings
-                    .Where(x => !x.IsDeleted);
-
-                // Apply Year filter once
-                if (request.Year.HasValue)
-                {
-                    mappingQuery = mappingQuery.Where(x => x.Year == request.Year.Value);
-                }
+                    .Where(x => !x.IsDeleted);               
 
                 // Apply role-based filtering
                 if (role != UserRole.Admin)
@@ -1438,161 +1432,53 @@ namespace COPPlatform.Services
         {
             try
             {
-                // 1. Validate city access
-                var userAssessmentMappings = await _context.UserAssessmentMappings
-                    .FirstOrDefaultAsync(x =>
-                        !x.IsDeleted && x.UserAssessmentMappingID == request.UserAssessmentMappingID);
-                var currentUser = await _context.Users.Where(u => u.UserID == userId) .Select(u => new { u.UserID, u.CreatedBy }).FirstOrDefaultAsync();
+                var pillarAssessment = await _commonService.GetPillarAssessmentProgressResults(userId, (int)userRole, request.UserAssessmentMappingID.GetValueOrDefault());
 
-                var relevantUserIds = new List<int> { userId };
-
-                if (currentUser?.CreatedBy != null)
-                {
-                    relevantUserIds.Add(currentUser.CreatedBy.Value);                    
-                }
-                bool hasAccess = true;
-
-                // ✅ Skip validation if no mapping ID is provided
-                if (request.UserAssessmentMappingID.HasValue && request.UserAssessmentMappingID > 0)
-                {
-                    hasAccess = userRole switch
-                    {
-                        UserRole.Admin => true,
-                        UserRole.Executive => true,
-
-                        // Analyst can access their own mappings
-                        UserRole.Analyst => await _context.UserAssessmentMappings
-                            .AnyAsync(x =>
-                                x.UserAssessmentMappingID == request.UserAssessmentMappingID &&
-                                x.UserID == userId &&
-                                !x.IsDeleted),
-
-                        // Evaluator can access mappings of the Analyst who created them
-                        UserRole.Evaluator => await _context.Users.AnyAsync(u => u.UserID == userId 
-                        && _context.UserAssessmentMappings.Any(x => x.UserID == u.CreatedBy &&
-                                x.UserAssessmentMappingID == request.UserAssessmentMappingID &&
-                                !x.IsDeleted
-                            )
-                        ),
-
-                        _ => false
-                    };
-                }
-
-                if (!hasAccess)
+                if (pillarAssessment == null)
                 {
                     return ResultResponseDto<AiCityPillarDashboardResponseDto>
-                        .Failure(new[] { "Unauthorized or invalid city access" });
+                        .Failure(new[] { "Error in getting pillar details" });
                 }
 
-                // 2. Fetch required data in parallel
-                var pillarEvaluationsList = await _commonService
-                    .GetAssessmentProgressAsync(userId, (int)userRole);
-                if (userRole == UserRole.Evaluator)
-                {
+                var groupedPillarAssessment = request.UserAssessmentMappingID is > 0
+                    ? pillarAssessment
+                        .GroupBy(x => x.UserAssessmentMappingID)
+                        .SelectMany(mappingGroup => mappingGroup
+                            .GroupBy(x => x.PillarID)
+                            .Select(AggregatePillarAssessmentByPillar))
+                        .OrderBy(x => x.DisplayOrder ?? 0)
+                        .ToList()
+                    : pillarAssessment
+                        .GroupBy(x => x.PillarID)
+                        .Select(AggregatePillarAssessmentByPillar)
+                        .OrderBy(x => x.DisplayOrder ?? 0)
+                        .ToList();
 
-                    pillarEvaluationsList = pillarEvaluationsList.Where(x => relevantUserIds.Contains(x.UserID)).ToList();
-                }
-
-
-                List<int>? mappedPillarIds = null;
-
-                if (request.UserAssessmentMappingID > 0)
-                {
-                    mappedPillarIds = await _context.Assessments
-                        .Where(a => a.UserAssessmentMappingID == request.UserAssessmentMappingID && a.IsActive)
-                        .SelectMany(a => a.PillarAssessments)
-                        .Where(pa => !pa.IsDeleted)
-                        .Select(pa => pa.PillarID)
-                        .Distinct()
-                        .ToListAsync();
-                    if (userRole == UserRole.Evaluator)
+                var pillarResults = groupedPillarAssessment
+                    .Select(pillar => new CityPillarDashboardPillarValueDto
                     {
-                        mappedPillarIds = await _context.UserPillarMappings.Where(upm => upm.UserID == userId
-                     && !upm.IsDeleted).Select(upm => upm.PillarID).Distinct().ToListAsync();
-                    }
-
-
-                }
-                else if (userRole == UserRole.Analyst || userRole == UserRole.Evaluator)
-                {
-                    mappedPillarIds = await _context.UserPillarMappings.Where(upm => upm.UserID == userId
-                      && !upm.IsDeleted).Select(upm => upm.PillarID).Distinct().ToListAsync();
-
-                }
-                var pillarsQuery = _context.Pillars.AsNoTracking().Where(x => !x.IsLocked || userRole == UserRole.Admin || userRole == UserRole.Executive);
-
-                // 🔥 APPLY FILTER ONLY IF mapping exists
-                if (mappedPillarIds != null)
-                {
-                    pillarsQuery = pillarsQuery.Where(p => mappedPillarIds.Contains(p.PillarID));
-                }
-
-                var pillars = await pillarsQuery
-                    .Select(P => new
-                    {
-                        P,
-                        TotalQuestions = P.Questions.Where(x => !x.IsDeleted).Count(),
-                        TotalCriticalQuestions = P.Questions.Where(x => !x.IsDeleted && x.IsCritical).Count()
+                        PillarID = pillar.PillarID,
+                        PillarName = pillar.PillarName ?? "",
+                        DisplayOrder = pillar.DisplayOrder ?? 0,
+                        ScoreProgress = pillar.ScoreProgress ?? 0,
+                        TotalAns = pillar.TotalAns,
+                        TotalQuestions = pillar.TotalQuestions,
+                        TotalCriticalQuestions = pillar.TotalCriticalQuestions,
+                        TotalAnsweredCriticalQuestions = pillar.TotalAnsweredCriticalQuestions,
+                        CompletionRate = pillar.CompletionRate ?? 0,
+                        TotalScore = pillar.TotalScore
                     })
-                    .OrderBy(x => x.P.DisplayOrder)
-                    .ToListAsync();
-                var pillarEvaluations = pillarEvaluationsList.AsQueryable();
+                    .ToList();
 
-                if (request.UserAssessmentMappingID > 0)
-                {
-                    pillarEvaluations = pillarEvaluations
-                        .Where(x => x.UserAssessmentMappingID == request.UserAssessmentMappingID);
-                }
-                // 3. Map pillar results
-                var pillarResults = pillars
-                            .GroupJoin(
-                                pillarEvaluations,
-                                p => p.P.PillarID,
-                                e => e.PillarID,
-                                (pillar, evals) =>
-                                {
-                                    var totalScore = evals.Sum(x => x.TotalScore);
-                                    var totalAns = evals.Sum(x => x.TotalAns);
-                                    var totalQuestions = evals.Sum(x => x.TotalQuestions);
-                                    var totalCriticalAns = evals.Sum(x => x.TotalAnsweredCriticalQuestions);
-                                    var avgTotalCriAns = evals.Any() ? evals.Average(x => x.TotalAnsweredCriticalQuestions) : 0;
-                                    var avgTotalAns = evals.Any() ? evals.Average(x => x.TotalAns) : 0;
-
-                                    var eval = evals.FirstOrDefault();
-
-                                    // ✅ Rounded to nearest integer
-                                    var roundedTotalAns = (int)Math.Round(avgTotalAns, MidpointRounding.AwayFromZero);
-                                    var roundedTotalCriticalAns = (int)Math.Round(avgTotalCriAns, MidpointRounding.AwayFromZero);
-                                    return new CityPillarDashboardPillarValueDto
-                                    {
-                                        PillarID = pillar.P.PillarID,
-                                        PillarName = pillar.P.PillarName,
-                                        DisplayOrder = pillar.P.DisplayOrder,
-
-                                        // ✅ SAFE calculation
-                                        ScoreProgress = eval?.ScoreProgress ?? 0,
-
-                                        TotalAns = roundedTotalAns, // ✅ final rounded value
-                                        TotalQuestions = pillar.TotalQuestions,
-                                        TotalCriticalQuestions = pillar.TotalCriticalQuestions,
-                                        TotalAnsweredCriticalQuestions = roundedTotalCriticalAns,
-
-                                        // ✅ FIX: avoid empty Average()
-                                        CompletionRate = eval?.CompletionRate ?? 0,
-
-                                        // ✅ FIXED
-                                        TotalScore = totalScore
-                                    };
-                                })
-                            .ToList();
-
-                // 4. Prepare response
                 var response = new AiCityPillarDashboardResponseDto
                 {
-                    UserAssessmentMappingID = userAssessmentMappings != null ? userAssessmentMappings.UserAssessmentMappingID : null,
-                    GeographicReference = userAssessmentMappings?.GeographicReference ?? string.Empty,
-                    ScoreProgress = pillarEvaluations.Any() ? Math.Round(pillarEvaluations.Average(x => x.ScoreProgress), 2) : 0,
+                    UserAssessmentMappingID = request.UserAssessmentMappingID,
+                    GeographicReference = request.UserAssessmentMappingID is > 0
+                        ? groupedPillarAssessment.FirstOrDefault()?.GeographicReference ?? ""
+                        : "",
+                    ScoreProgress = groupedPillarAssessment.Count > 0
+                        ? Math.Round(groupedPillarAssessment.Average(x => x.ScoreProgress ?? 0), 2)
+                        : 0,
                     Pillars = pillarResults
                 };
 
@@ -1606,6 +1492,37 @@ namespace COPPlatform.Services
                 return ResultResponseDto<AiCityPillarDashboardResponseDto>
                     .Failure(new[] { "Error in getting pillar details" });
             }
+        }
+
+        private static PillarAssessmentProgressResult AggregatePillarAssessmentByPillar(
+            IGrouping<int, PillarAssessmentProgressResult> group)
+        {
+            var first = group.First();
+            var count = group.Count();
+
+            return new PillarAssessmentProgressResult
+            {
+                PillarID = group.Key,
+                PillarName = first.PillarName,
+                DisplayOrder = first.DisplayOrder,
+                UserAssessmentMappingID = first.UserAssessmentMappingID,
+                GeographicReference = first.GeographicReference,
+                TotalScore = group.Sum(x => x.TotalScore),
+                TotalAns = count > 0
+                    ? (int)Math.Round(group.Average(x => x.TotalAns), MidpointRounding.AwayFromZero)
+                    : 0,
+                TotalQuestions = count > 0
+                    ? (int)Math.Round(group.Average(x => x.TotalQuestions), MidpointRounding.AwayFromZero)
+                    : 0,
+                TotalCriticalQuestions = count > 0
+                    ? (int)Math.Round(group.Average(x => x.TotalCriticalQuestions), MidpointRounding.AwayFromZero)
+                    : 0,
+                TotalAnsweredCriticalQuestions = count > 0
+                    ? (int)Math.Round(group.Average(x => x.TotalAnsweredCriticalQuestions), MidpointRounding.AwayFromZero)
+                    : 0,
+                ScoreProgress = count > 0 ? group.Average(x => x.ScoreProgress ?? 0) : 0,
+                CompletionRate = count > 0 ? group.Average(x => x.CompletionRate ?? 0) : 0
+            };
         }
 
     }

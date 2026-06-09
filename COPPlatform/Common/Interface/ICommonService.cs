@@ -21,5 +21,6 @@ namespace COPPlatform.Common.Interface
         Task<List<AnalyticalLayerSPResult>> GetAnalyticalLayerResultsAsync(
            int userId, int role, int userAssessmentMappingId = 0,
            int pageNumber = 1, int pageSize = 14, int layerId = 0, string search = "");
+        Task<List<PillarAssessmentProgressResult>> GetPillarAssessmentProgressResults(int userId, int role, int userAssessmentMappingId = 0);
     }
 }

@@ -7,7 +7,6 @@ namespace COPPlatform.Dtos.AssessmentDto
     {
         public int? UserAssessmentMappingID { get; set; }
         public UserRole? Role { get; set; }
-        public int? Year { get; set; } = DateTime.UtcNow.Year;
     }
 }
     

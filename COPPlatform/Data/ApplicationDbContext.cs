@@ -38,6 +38,7 @@ namespace COPPlatform.Data
         public DbSet<UserEvaluationPillarProgressResultDto> UserEvaluationPillarProgressResults { get; set; }
         public DbSet<EmailLog> EmailLogs { get; set; }
         public DbSet<AnalyticalLayerSPResult> AnalyticalLayerSPResults { get; set; }
+        public DbSet<PillarAssessmentProgressResult> PillarAssessmentProgressResults { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -135,6 +136,7 @@ namespace COPPlatform.Data
             modelBuilder.Entity<GetCitiesProgressAdminDto>().HasNoKey().ToView(null); 
             modelBuilder.Entity<UserEvaluationPillarProgressResultDto>().HasNoKey().ToView(null);
             modelBuilder.Entity<AnalyticalLayerSPResult>().HasNoKey();
+            modelBuilder.Entity<PillarAssessmentProgressResult>().HasNoKey();
 
             base.OnModelCreating(modelBuilder); 
         }
