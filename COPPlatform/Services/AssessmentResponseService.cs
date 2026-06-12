@@ -273,7 +273,15 @@ namespace COPPlatform.Services
                     };
                 }
 
-                // Main query (JOIN instead of Contains for better SQL)
+                var pillarAssessment = await _commonService.GetPillarAssessmentProgressResults(request.UserId.GetValueOrDefault(), (int)role, request.UserAssessmentMappingID.GetValueOrDefault());
+
+
+                var assessmentScoreDict = pillarAssessment
+                    .GroupBy(x => x.UserAssessmentMappingID)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => Math.Round(g.Average(p => p.ScoreProgress ?? 0), 2));
+
                 var query =
                     from a in _context.Assessments
                     join m in mappingQuery
@@ -281,12 +289,6 @@ namespace COPPlatform.Services
                     where a.IsActive
                           && (!request.UserAssessmentMappingID.HasValue ||
                               a.UserAssessmentMappingID == request.UserAssessmentMappingID.Value)
-
-                    let responses = a.PillarAssessments
-                        .Where(p => !p.IsDeleted)
-                        .SelectMany(p => p.Responses)
-                        .Where(r => !r.IsDeleted)
-
                     select new GetAssessmentResponseDto
                     {
                         AssessmentID = a.AssessmentID,
@@ -298,22 +300,20 @@ namespace COPPlatform.Services
                         AnalystName = m.User.FullName,
                         Role = m.Role,
                         DueDate = m.DueDate,
-                        Score = (responses.Where(r => r.Score.HasValue && (int)r.Score.Value <= (int)ScoreValue.Four).Sum(r => (decimal)((int?)r.Score ?? 0)) * 100m),
+                        Score = 0,
                         AssessmentPhase = a.AssessmentPhase,
                     };
-                              
 
-                var result =  await query.ApplyPaginationAsync(request);
+                var result = await query.ApplyPaginationAsync(request);
 
                 foreach (var item in result.Data)
                 {
-                    var listofPillars = await _context.UserPillarMappings.Where(x => x.UserAssessmentMappingID == item.UserAssessmentMappingID).Select(x => x.PillarID).Distinct().ToListAsync();
-
-                    var totalQuestions = await _context.Questions.Where(q => listofPillars.Contains(q.PillarID) && !q.IsDeleted).CountAsync();
-
-                    item.Score = totalQuestions == 0 ? 0 : Math.Round(item.Score / (totalQuestions * 4m), 2);
-
+                    if (assessmentScoreDict.TryGetValue(item.UserAssessmentMappingID, out var score))
+                    {
+                        item.Score = score;
+                    }
                 }
+
                 return result;
             }
             catch (Exception ex)
@@ -334,39 +334,49 @@ namespace COPPlatform.Services
         {
             try
             {
-                var user = _context.Users.FirstOrDefault(x => x.UserID == request.UserId);
-                if (user == null) return null;
+                if (!request.UserId.HasValue || request.UserId.Value <= 0)
+                    return null;
 
-                var userIDs = new List<int>();
-                var query = _context.Assessments
-                    .Include(a => a.PillarAssessments)
-                    .ThenInclude(pa => pa.Responses)
-                        .ThenInclude(r => r.Question)
-                            .ThenInclude(q => q.QuestionOptions)
-                    .Where(a => a.AssessmentID == request.AssessmentID)
-                    .SelectMany(a => a.PillarAssessments)
-                    .Where(x => !request.PillarID.HasValue || x.PillarID == request.PillarID.Value)
-                    .SelectMany(x => x.Responses)
-                    .Select(r => new GetAssessmentQuestionResponseDto
+                var userId = request.UserId.Value;
+
+                var userExists = await _context.Users
+                    .AsNoTracking()
+                    .AnyAsync(u => u.UserID == userId);
+
+                if (!userExists)
+                    return null;
+
+                var assessmentId = request.AssessmentID;
+                var pillarId = request.PillarID;
+
+                var query =
+                    from response in _context.AssessmentResponses.AsNoTracking()
+                    join pillarAssessment in _context.PillarAssessments.AsNoTracking()
+                        on response.PillarAssessmentID equals pillarAssessment.PillarAssessmentID
+                    join question in _context.Questions.AsNoTracking()
+                        on response.QuestionID equals question.QuestionID
+                    join pillar in _context.Pillars.AsNoTracking()
+                        on question.PillarID equals pillar.PillarID
+                    join option in _context.QuestionOptions.AsNoTracking()
+                        on response.QuestionOptionID equals option.OptionID into options
+                    from selectedOption in options.DefaultIfEmpty()
+                    where pillarAssessment.AssessmentID == assessmentId
+                        && (!pillarId.HasValue || pillarAssessment.PillarID == pillarId.Value)
+                    select new GetAssessmentQuestionResponseDto
                     {
-                        AssessmentID = request.AssessmentID,
-                        PillarID = r.PillarAssessment.PillarID,
-                        PillarName = r.Question.Pillar.PillarName,
-                        QuestionID = r.QuestionID,
-                        Score = r.Score,
-                        UserID = user.UserID,
-                        Justification = r.Justification,
-                        Source = r.Source ?? "",
-                        QuestionOptionText = r.Question.QuestionOptions
-                            .Where(o => o.OptionID == r.QuestionOptionID)
-                            .Select(o => o.OptionText)
-                            .FirstOrDefault() ?? string.Empty,
-                        QuestionText = r.Question.QuestionText
-                    });
+                        AssessmentID = assessmentId,
+                        PillarID = pillarAssessment.PillarID,
+                        PillarName = pillar.PillarName,
+                        QuestionID = response.QuestionID,
+                        Score = response.Score,
+                        UserID = userId,
+                        Justification = response.Justification,
+                        Source = response.Source ?? string.Empty,
+                        QuestionOptionText = selectedOption != null ? selectedOption.OptionText : string.Empty,
+                        QuestionText = question.QuestionText
+                    };
 
-                var response = await query.ApplyPaginationAsync(request);
-
-                return response;
+                return await query.ApplyPaginationAsync(request);
             }
             catch (Exception ex)
             {
@@ -374,8 +384,8 @@ namespace COPPlatform.Services
                 return new PaginationResponse<GetAssessmentQuestionResponseDto>
                 {
                     Data = new List<GetAssessmentQuestionResponseDto>(),
-                    PageNumber = 1,
-                    PageSize = 10,
+                    PageNumber = request.PageNumber,
+                    PageSize = request.PageSize,
                     TotalRecords = 0
                 };
             }
