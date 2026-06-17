@@ -1234,8 +1234,8 @@ namespace COPPlatform.Services
                         .Select(p =>
                         {
                             pillarMeta.TryGetValue(p.PillarID, out var meta);
-                            evalByMappingAndPillar.TryGetValue(
-                                (item.UserAssessmentMappingID, p.PillarID), out var evals);
+                            evalByMappingAndPillar.TryGetValue((item.UserAssessmentMappingID, p.PillarID), out var evals);
+
                             evals ??= new List<EvaluationCityProgressResultDto>();
 
                             var avgTotalAns = evals.Count > 0 ? evals.Average(x => x.TotalAns) : 0;
@@ -1273,35 +1273,51 @@ namespace COPPlatform.Services
                     var pillarCount = pillars.Count;
                     var totalScore = pillars.Sum(x => x.TotalScore);
                     var totalAnswered = pillars.Sum(x => x.TotalAnsweredQuestions);
-                    var totalCriticalAnswered = pillars.Sum(x => x.TotalCriticalAnsweredQuestions);
                     var totalQuestions = pillars.Sum(x => x.TotalQuestions);
+
+                    var totalCriticalAnswered = pillars.Sum(x => x.TotalCriticalAnsweredQuestions);
                     var totalCriticalQuestions = pillars.Sum(x => x.TotalCriticalQuestions);
 
-                    var progress = totalQuestions == 0 ? 0 : (totalAnswered * 100m) / totalQuestions;
+                    var progress = pillars.Average(x => x.ScoreProgress);
 
-                    var totalDays = (item.DueDate - item.UpdatedAt)?.Days ?? 0;
-                    var daysElapsed = (DateTime.UtcNow - item.UpdatedAt)?.Days ?? 0;
+                    // Pace model (answered vs expected-to-date):
+                    // - expectedQuestions uses a *ceiling* to avoid truncation (e.g. 5 Q / 7 days should expect 1 Q on day 1).
+                    // - day math is date-based and inclusive to reduce off-by-one from time-of-day.
+                    var startDateUtc = (item.UpdatedAt ?? DateTime.UtcNow).Date;
+                    var todayUtc = DateTime.UtcNow.Date;
+                    var dueDateUtc = item.DueDate?.Date;
+
+                    var totalDays = dueDateUtc.HasValue ? (dueDateUtc.Value - startDateUtc).Days + 1 : 0;
                     if (totalDays <= 0) totalDays = 1;
-                    if (daysElapsed < 0) daysElapsed = 0;
 
-                    var expectedQuestions = (daysElapsed * totalQuestions) / totalDays;
-                    if (expectedQuestions > totalQuestions)
-                        expectedQuestions = totalQuestions;
+                    var daysElapsed = (todayUtc - startDateUtc).Days + 1;
+                    if (daysElapsed < 0) daysElapsed = 0;
+                    if (daysElapsed > totalDays) daysElapsed = totalDays;
+
+                    int expectedQuestions;
+                    if (!dueDateUtc.HasValue || totalQuestions <= 0)
+                    {
+                        expectedQuestions = Math.Min(totalQuestions, totalAnswered);
+                    }
+                    else
+                    {
+                        expectedQuestions = (int)Math.Ceiling(totalQuestions * (daysElapsed / (decimal)totalDays));
+                        if (expectedQuestions > totalQuestions) expectedQuestions = totalQuestions;
+                        if (expectedQuestions < 0) expectedQuestions = 0;
+                    }
 
                     var onTrackCount = Math.Min(totalAnswered, expectedQuestions);
-                    var offTrackCount = totalAnswered < expectedQuestions
-                        ? expectedQuestions - totalAnswered
-                        : 0;
-                    var atRiskCount = totalQuestions - (onTrackCount + offTrackCount);
+                    var offTrackCount = Math.Max(0, expectedQuestions - totalAnswered);
+                    var atRiskCount = Math.Max(0, totalQuestions - expectedQuestions);
 
                     decimal onTrackPercent = totalQuestions == 0 ? 0 : (onTrackCount * 100m) / totalQuestions;
                     decimal offTrackPercent = totalQuestions == 0 ? 0 : (offTrackCount * 100m) / totalQuestions;
                     decimal atRiskPercent = totalQuestions == 0 ? 0 : (atRiskCount * 100m) / totalQuestions;
 
-                    if (item.DueDate.HasValue && DateTime.UtcNow > item.DueDate)
+                    if (dueDateUtc.HasValue && todayUtc > dueDateUtc.Value)
                     {
-                        onTrackCount = totalAnswered;
-                        offTrackCount = totalQuestions - totalAnswered;
+                        onTrackCount = Math.Min(totalAnswered, totalQuestions);
+                        offTrackCount = Math.Max(0, totalQuestions - totalAnswered);
                         atRiskCount = 0;
 
                         onTrackPercent = totalQuestions == 0 ? 0 : (onTrackCount * 100m) / totalQuestions;
@@ -1309,7 +1325,7 @@ namespace COPPlatform.Services
                         atRiskPercent = 0;
                     }
 
-                    var daysRemaining = (item.DueDate - DateTime.UtcNow)?.Days ?? 0;
+                    var daysRemaining = dueDateUtc.HasValue ? (dueDateUtc.Value - todayUtc).Days : 0;
                     var expected = totalDays == 0 ? 0 : (daysElapsed * 100m) / totalDays;
 
                     string riskLevel;

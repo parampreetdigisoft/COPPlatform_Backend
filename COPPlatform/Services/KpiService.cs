@@ -54,6 +54,206 @@ namespace COPPlatform.Services
             }
         }
 
+        public async Task<PaginationResponse<GetAnalyticalLayerResultDto>> GetExecutiveOverviewKpis(
+            GetExecutiveOverviewKpisRequestDto request,
+            int userId,
+            UserRole role)
+        {
+            try
+            {
+                // This dashboard is designed to stay lightweight:
+                // - hard cap: 250 records max
+                // - default page size: 25 records on screen
+                // To keep TotalRecords accurate (after filtering), we pull <=250 once then paginate in-memory.
+                const int hardCap = 250;
+                var pageNumber = request.PageNumber <= 0 ? 1 : request.PageNumber;
+                var pageSize = request.PageSize <= 0 ? 25 : request.PageSize;
+                if (pageSize > hardCap) pageSize = hardCap;
+
+                var layerScores = await _commonService.GetAnalyticalLayerResultsAsync(
+                    userId,
+                    (int)role,
+                    request.UserAssessmentMappingID,
+                    1,
+                    hardCap,
+                    request.LayerID.GetValueOrDefault(),
+                     "");
+
+                var mapped = await MapLayerScoresAsync(layerScores);
+
+                var filtered = request.IncludePillarKpis
+                    ? mapped
+                    : mapped.Where(x => x.PillarID == null || x.PillarID == 0).ToList();
+
+                var totalRecords = filtered.Count;
+
+                var paged = filtered
+                    .Skip((pageNumber - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                return new PaginationResponse<GetAnalyticalLayerResultDto>
+                {
+                    Data = paged,
+                    TotalRecords = totalRecords,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize
+                };
+            }
+            catch (Exception ex)
+            {
+                await _appLogger.LogAsync("Error occurred in GetExecutiveOverviewKpis", ex);
+                return new PaginationResponse<GetAnalyticalLayerResultDto>();
+            }
+        }
+
+        public async Task<ResultResponseDto<GetExecutiveKpiDashboardResponseDto>> GetExecutiveKpiDashboard(
+            GetExecutiveOverviewKpisRequestDto request,
+            int userId,
+            UserRole role)
+        {
+            try
+            {
+                const int hardCap = 500;
+
+                var layerScores = await _commonService.GetAnalyticalLayerResultsAsync(
+                    userId,
+                    (int)role,
+                    request.UserAssessmentMappingID,
+                    1,
+                    hardCap,
+                    request.LayerID.GetValueOrDefault(),
+                    request.SearchText ?? "");
+
+                var mapped = await MapLayerScoresAsync(layerScores);
+
+                var overallRecords = mapped
+                    .Where(x => x.PillarID == null || x.PillarID == 0)
+                    .GroupBy(x => x.LayerID)
+                    .Select(g => g.First())
+                    .OrderBy(x => x.LayerCode)
+                    .ToList();
+
+                var pillarRecords = mapped
+                    .Where(x => x.PillarID != null && x.PillarID > 0)
+                    .GroupBy(x => new { x.PillarID, x.LayerID })
+                    .Select(g => g.First())
+                    .ToList();
+
+                var overallKpis = overallRecords.Select(ToLayerGroup).ToList();
+
+                var pillarGroups = pillarRecords
+                    .GroupBy(x => new { x.PillarID, x.PillarName })
+                    .Select(g => new ExecutivePillarKpiGroupDto
+                    {
+                        PillarID = g.Key.PillarID ?? 0,
+                        PillarName = g.Key.PillarName ?? string.Empty,
+                        KpiCount = g.Count(),
+                        AvgScore = g.Any()
+                            ? Math.Round(g.Average(x => x.CalValue ?? 0), 2)
+                            : 0,
+                        Kpis = g.Select(ToLayerGroup).OrderBy(x => x.LayerCode).ToList()
+                    })
+                    .OrderBy(x => x.PillarName)
+                    .ToList();
+
+                var kpiConditionSummary = GetKpiConditionSummary(mapped);
+
+                var response = new GetExecutiveKpiDashboardResponseDto
+                {
+                    Summary = new ExecutiveKpiDashboardSummaryDto
+                    {
+                        OverallKpiCount = kpiConditionSummary.Count,
+                        PillarCount = pillarGroups.Count,
+                        TotalKpiRecords = mapped.Count,
+                        OverallReadinessScore = overallKpis.Any()
+                            ? Math.Round(overallKpis.Average(x => x.CalValue ?? 0), 2)
+                            : 0,
+                        CriticalCount = kpiConditionSummary.Count(x => x.EffectiveConditionLevel == 1),
+                        AtRiskCount = kpiConditionSummary.Count(x => x.EffectiveConditionLevel is 2 or 3),
+                        OnTrackCount = kpiConditionSummary.Count(x => x.EffectiveConditionLevel >= 4)
+                    },
+                    OverallKpis = overallKpis,
+                    PillarGroups = pillarGroups
+                };
+
+                return ResultResponseDto<GetExecutiveKpiDashboardResponseDto>.Success(response);
+            }
+            catch (Exception ex)
+            {
+                await _appLogger.LogAsync("Error occurred in GetExecutiveKpiDashboard", ex);
+                return ResultResponseDto<GetExecutiveKpiDashboardResponseDto>.Failure(
+                    new List<string> { "An error occurred while loading KPI dashboard data." });
+            }
+        }
+
+        private static ExecutiveKpiLayerGroupDto ToLayerGroup(GetAnalyticalLayerResultDto item)
+        {
+            var level = GetConditionLevel(item);
+            return new ExecutiveKpiLayerGroupDto
+            {
+                LayerID = item.LayerID,
+                LayerCode = item.LayerCode,
+                LayerName = item.LayerName,
+                Purpose = item.Purpose,
+                CalText = item.CalText,
+                InterpretationID = item.InterpretationID,
+                CalValue = item.CalValue,
+                Condition = GetConditionText(item),
+                ConditionLevel = level,
+                FiveLevelInterpretations = item.FiveLevelInterpretations,
+                Detail = item
+            };
+        }
+
+        private static string GetConditionText(GetAnalyticalLayerResultDto layer)
+        {
+            return layer.FiveLevelInterpretations?
+                .FirstOrDefault(x => x.InterpretationID == layer.InterpretationID)?
+                .Condition ?? "-";
+        }
+
+        private static int GetConditionLevel(GetAnalyticalLayerResultDto layer)
+        {
+            if (layer.InterpretationID == null || layer.FiveLevelInterpretations == null || !layer.FiveLevelInterpretations.Any())
+                return 0;
+
+            var sorted = layer.FiveLevelInterpretations.OrderBy(x => x.MinRange).ToList();
+            var index = sorted.FindIndex(x => x.InterpretationID == layer.InterpretationID);
+            return index == -1 ? 0 : index + 1;
+        }
+
+        /// <summary>
+        /// One row per KPI (LayerID). Pillar-based KPIs use pillar scores; when a KPI spans
+        /// multiple pillars with different conditions, the worst (most critical) level wins.
+        /// </summary>
+        private static List<(int LayerID, int EffectiveConditionLevel)> GetKpiConditionSummary(
+            List<GetAnalyticalLayerResultDto> mapped)
+        {
+            return mapped
+                .GroupBy(x => x.LayerID)
+                .Select(g =>
+                {
+                    var records = g.ToList();
+                    var pillarRecords = records.Where(x => x.PillarID is > 0).ToList();
+                    var sourceRecords = pillarRecords.Count > 0
+                        ? pillarRecords
+                        : records.Where(x => x.PillarID is null or 0).ToList();
+
+                    if (sourceRecords.Count == 0)
+                        sourceRecords = records;
+
+                    var levels = sourceRecords
+                        .Select(GetConditionLevel)
+                        .Where(level => level > 0)
+                        .ToList();
+
+                    var effectiveLevel = levels.Count > 0 ? levels.Min() : 0;
+                    return (g.Key, effectiveLevel);
+                })
+                .ToList();
+        }
+
         public async Task<ResultResponseDto<GetKpiLayerChartResponseDto>> GetKpiLayerChart(
             GetKpiLayerChartRequestDto request, int userId, UserRole role)
         {

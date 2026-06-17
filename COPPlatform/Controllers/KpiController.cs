@@ -63,6 +63,51 @@ namespace COPPlatform.Controllers
 
             return Ok(result);
         }
+
+        [HttpGet]
+        [Route("GetExecutiveOverviewKpis")]
+        public async Task<IActionResult> GetExecutiveOverviewKpis([FromQuery] GetExecutiveOverviewKpisRequestDto request)
+        {
+            var userId = GetUserIdFromClaims();
+            if (userId == null)
+                return Unauthorized("User ID not found in token.");
+
+            var role = GetRoleFromClaims();
+            if (role == null)
+                return Unauthorized("You Don't have access.");
+
+            if (!Enum.TryParse<UserRole>(role, true, out var userRole))
+            {
+                return Unauthorized("You Don't have access.");
+            }
+
+            var result = await _kpiService.GetExecutiveOverviewKpis(request, userId.GetValueOrDefault(), userRole);
+            if (result == null)
+            {
+                return Unauthorized("You Don't have access.");
+            }
+
+            return Ok(result);
+        }
+
+        [HttpGet]
+        [Route("GetExecutiveKpiDashboard")]
+        public async Task<IActionResult> GetExecutiveKpiDashboard([FromQuery] GetExecutiveOverviewKpisRequestDto request)
+        {
+            var userId = GetUserIdFromClaims();
+            if (userId == null)
+                return Unauthorized("User ID not found in token.");
+
+            var role = GetRoleFromClaims();
+            if (role == null)
+                return Unauthorized("You Don't have access.");
+
+            if (!Enum.TryParse<UserRole>(role, true, out var userRole))
+                return Unauthorized("You Don't have access.");
+
+            var result = await _kpiService.GetExecutiveKpiDashboard(request, userId.GetValueOrDefault(), userRole);
+            return Ok(result);
+        }
         [HttpGet]
         [Route("GetAllKpi")]
         public async Task<IActionResult> GetAllKpi()

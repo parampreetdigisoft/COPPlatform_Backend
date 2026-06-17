@@ -573,8 +573,7 @@ namespace COPPlatform.Services
             }
         }
 
-        public async Task<ResultResponseDto<List<PillarsHistroyResponseDto>>> GetResponsesByUserIdWeekly(GetPillarResponseHistoryRequestNewDto request,
-    int userId, UserRole userRole)
+        public async Task<ResultResponseDto<List<PillarsHistroyResponseDto>>> GetResponsesByUserIdWeekly(GetPillarResponseHistoryRequestNewDto request, int userId, UserRole userRole)
         {
             try
             {

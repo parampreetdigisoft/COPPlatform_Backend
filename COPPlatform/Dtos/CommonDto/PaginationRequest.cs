@@ -14,7 +14,9 @@
         public int PageSize
         {
             get => _pageSize <= 0 ? 10 : _pageSize;
-            set => _pageSize = value > 200 ? 200 : value; 
+            // Global safety cap to avoid accidental large payloads.
+            // This project’s dashboards intentionally cap lists to <= 250.
+            set => _pageSize = value > 250 ? 250 : value;
         }
 
         public string? SortBy { get; set; }
