@@ -43,6 +43,45 @@ namespace COPPlatform.Services
 
         }
 
+        public async Task<List<Pillar>> GetPillarsByUserAssessmentMappingIdAsync(int userAssessmentMappingId, int userId, UserRole userRole)
+        {
+            try
+            {
+                if (userAssessmentMappingId <= 0)
+                    return new List<Pillar>();
+
+                var canViewAllPillars = userRole == UserRole.Admin || userRole == UserRole.Executive;
+
+                var pillarIdsQuery = _context.UserPillarMappings
+                    .AsNoTracking()
+                    .Where(upm => upm.UserAssessmentMappingID == userAssessmentMappingId
+                        && !upm.IsDeleted
+                        && upm.IsActive);
+
+                if (!canViewAllPillars)
+                    pillarIdsQuery = pillarIdsQuery.Where(upm => upm.UserID == userId);
+
+                var pillarIds = await pillarIdsQuery
+                    .Select(upm => upm.PillarID)
+                    .Distinct()
+                    .ToListAsync();
+
+                if (!pillarIds.Any())
+                    return new List<Pillar>();
+
+                return await _context.Pillars
+                    .AsNoTracking()
+                    .Where(p => pillarIds.Contains(p.PillarID))
+                    .OrderBy(p => p.DisplayOrder)
+                    .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                await _appLogger.LogAsync("Error Occure in GetPillarsByUserAssessmentMappingIdAsync", ex);
+                return new List<Pillar>();
+            }
+        }
+
         public async Task<Pillar> GetByIdAsync(int id)
         {
             try

@@ -684,75 +684,48 @@ namespace COPPlatform.Services
 
                 List<int> accessPillars = new();
 
-                // Step 2: Get accessible pillars
-                if (userRole == UserRole.Admin ||
-                    userRole == UserRole.Executive)
-                {
-                    accessPillars = await _context.Pillars                        
-                        .Select(p => p.PillarID)
-                        .ToListAsync();
-                }
-                else
-                {
-                    accessPillars = await _context.UserPillarMappings
-                        .Where(x => x.UserAssessmentMappingID == mappingId
-                                 && x.UserID == userID
-                                 && !x.IsDeleted
-                                 && x.IsActive)
-                        .Select(x => x.PillarID)
-                        .ToListAsync();
+                accessPillars = await _context.UserPillarMappings
+                                        .Where(x => x.UserAssessmentMappingID == mappingId
+                                                 && (x.UserID == userID || userRole == UserRole.Admin || userRole == UserRole.Executive)
+                                                 && !x.IsDeleted
+                                                 && x.IsActive)
+                                        .Select(x => x.PillarID)
+                                        .Distinct()
+                                        .ToListAsync();
 
-                    if (!accessPillars.Any())
-                    {
-                        return ResultResponseDto<GetAssessmentHistoryDto>
-                            .Success(new GetAssessmentHistoryDto
-                            {
-                                AssessmentID = assessmentID,
-                                Score = 0,
-                                TotalAnsPillar = 0,
-                                TotalPillar = 0,
-                                TotalAnsQuestion = 0,
-                                TotalQuestion = 0,
-                                CurrentProgress = 0
-                            }, new[] { "No accessible pillars found" });
-                    }
+                if (!accessPillars.Any())
+                {
+                    return ResultResponseDto<GetAssessmentHistoryDto>
+                        .Success(new GetAssessmentHistoryDto
+                        {
+                            AssessmentID = assessmentID,
+                            Score = 0,
+                            TotalAnsPillar = 0,
+                            TotalPillar = 0,
+                            TotalAnsQuestion = 0,
+                            TotalQuestion = 0,
+                            CurrentProgress = 0
+                        }, new[] { "No accessible pillars found" });
                 }
 
                 // Step 3: Build query
                 var pillarAssessmentQuery = _context.PillarAssessments
-                    .Where(pa => pa.AssessmentID == assessmentID);
+                    .Where(pa => pa.AssessmentID == assessmentID && accessPillars.Contains(pa.PillarID));
 
-                if (userRole != UserRole.Admin &&
-                    userRole != UserRole.Executive)
-                {
-                    pillarAssessmentQuery = pillarAssessmentQuery
-                        .Where(pa => accessPillars.Contains(pa.PillarID));
-                }
-
+               
                 var data = await pillarAssessmentQuery
                     .Select(pa => new
                     {
                         pa.PillarID,
                         Responses = pa.Responses
-                            .Where(r => r.Score.HasValue)
+                            .Where(r => r.Score.HasValue && !r.IsDeleted)
+
                     })
                     .ToListAsync();
 
-                // Step 4: Total Questions
-                int totalQuestions;
-
-                if (userRole == UserRole.Admin ||
-                    userRole == UserRole.Executive)
-                {
-                    totalQuestions = await _context.Questions
-                        .CountAsync();
-                }
-                else
-                {
-                    totalQuestions = await _context.Questions
-                        .Where(q => accessPillars.Contains(q.PillarID))
-                        .CountAsync();
-                }
+                int totalQuestions = await _context.Questions
+                         .Where(q => !q.IsDeleted && accessPillars.Contains(q.PillarID))
+                         .CountAsync();
 
                 // Step 5: Calculations
                 var totalAnsweredQuestions = data
@@ -767,18 +740,7 @@ namespace COPPlatform.Services
                 var totalAnsweredPillars = data
                     .Count(p => p.Responses.Any());
 
-                int totalPillars;
-
-                if (userRole == UserRole.Admin ||
-                    userRole == UserRole.Executive)
-                {
-                    totalPillars = await _context.Pillars                       
-                        .CountAsync();
-                }
-                else
-                {
-                    totalPillars = accessPillars.Count;
-                }
+                int totalPillars = accessPillars.Count;                
 
                 // Step 6: Response
                 var result = new GetAssessmentHistoryDto
@@ -791,8 +753,8 @@ namespace COPPlatform.Services
                     TotalQuestion = totalQuestions,
                     CurrentProgress = totalQuestions > 0
                         ? Math.Round(
-                            (totalAnsweredQuestions / (double)totalQuestions) * 100,
-                            0)
+                            ((double)totalAnsweredQuestions / (double)totalQuestions) * 100.0,
+                            1)
                         : 0
                 };
 

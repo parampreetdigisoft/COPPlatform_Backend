@@ -40,6 +40,29 @@ namespace COPPlatform.Controllers
         [Route("Pillars")]
         public async Task<IActionResult> GetAll() => Ok(await _pillarService.GetAllAsync());
 
+        [HttpGet("GetPillarsByUserAssessmentMappingId")]
+        [Authorize]
+        public async Task<IActionResult> GetPillarsByUserAssessmentMappingId([FromQuery] int userAssessmentMappingId)
+        {
+            var claimUserId = GetUserIdFromClaims();
+            if (claimUserId == null)
+                return Unauthorized("User ID not found.");
+
+            var role = GetRoleFromClaims();
+            if (role == null)
+                return Unauthorized("You Don't have access.");
+
+            if (!Enum.TryParse<UserRole>(role, true, out var userRole))
+                return Unauthorized("You Don't have access.");
+
+            var pillars = await _pillarService.GetPillarsByUserAssessmentMappingIdAsync(
+                userAssessmentMappingId,
+                claimUserId.Value,
+                userRole);
+
+            return Ok(pillars);
+        }
+
         [HttpGet("{id}")]
         [Authorize]
         public async Task<IActionResult> GetById(int id)
