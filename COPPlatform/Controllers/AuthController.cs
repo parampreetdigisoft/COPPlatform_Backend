@@ -1,5 +1,3 @@
-
-using COPPlatform.Dtos.CityDto;
 using COPPlatform.Dtos.UserDtos;
 using COPPlatform.IServices;
 using Microsoft.AspNetCore.Authorization;
@@ -69,13 +67,6 @@ namespace COPPlatform.Controllers
                 return StatusCode(500, "User registration failed due to a server error.");
 
             return Ok(response);
-        }
-
-        [HttpPost("CityUserSignUp")]
-        public async Task<IActionResult> CityUserSignUp([FromBody] CityUserSignUpDto request)
-        {
-            var user = await _authService.CityUserSignUp(request);
-            return Ok(user);
         }
 
         [HttpPost]
@@ -173,15 +164,6 @@ namespace COPPlatform.Controllers
             return Ok(user);
         }
 
-        [HttpPost("sendMailForEditAssessment")]
-        [Authorize]
-        public async Task<IActionResult> SendMailForEditAssessment([FromBody] SendRequestMailToUpdateCity request)
-        {
-            var user = await _authService.SendMailForEditAssessment(request);
-            if (user == null)
-                return Unauthorized();
-            return Ok(user);
-        }
 
         [HttpPost]
         [Route("confirmMail")]

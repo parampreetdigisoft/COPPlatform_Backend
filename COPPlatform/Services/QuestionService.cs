@@ -311,7 +311,7 @@ namespace COPPlatform.Services
                         .Include(p => p.Questions)
                             .ThenInclude(q => q.QuestionOptions)
                         .Where(p => pillarMappings.Select(x => x.PillarID).Contains(p.PillarID))
-                        .Where(p => !request.PillarID.HasValue ? !answeredPillarIds.Contains(p.PillarID) : p.PillarID == request.PillarID && !p.IsLocked)
+                        .Where(p =>  p.PillarID == request.PillarID)
                         .OrderBy(p => p.DisplayOrder)
                         .FirstOrDefaultAsync();
 

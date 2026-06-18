@@ -27,7 +27,7 @@
         public decimal ScoreProgress { get; set; }
         public decimal CompletionRate { get; set; }
         public int SubmittedByUserID { get; set; }
-        public string SubmittedByUserName { get; set; }
+        public string? SubmittedByUserName { get; set; }
 
         public string? WeekType { get; set; }
     }

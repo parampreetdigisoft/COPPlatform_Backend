@@ -20,8 +20,6 @@ namespace COPPlatform.IServices
         Task<GetCityQuestionHistoryReponseDto> GetCityQuestionHistory(UserCityRequstDto userCityRequstDto);
         Task<ResultResponseDto<GetAssessmentHistoryDto>> GetAssessmentProgressHistory(int assessmentID, int userID, UserRole userRole);
         Task<ResultResponseDto<string>> ChangeAssessmentStatus(ChangeAssessmentStatusRequestDto r);
-        Task<ResultResponseDto<string>> TransferAssessment(TransferAssessmentRequestDto r);
-        Task<ResultResponseDto<AiCityPillarDashboardResponseDto>> GetCityPillarHistory(UserCityDashBoardRequstDto userCityRequstDto,int userID, UserRole userRole);
         Task<ResultResponseDto<List<GetAssignedAssessmentResponseDto>>> GetAssignedAssessments(int userID, UserRole userRole);
         Task<ResultResponseDto<List<GetAssignedAssessmentResponseDto>>> GetAssignedInvitations(int userID, UserRole userRole);
         Task<ResultResponseDto<List<GetExecutiveAssignedAssessmentResponseDto>>> GetExecutiveAssignedInvitations(int userID, UserRole userRole, string? searchText);

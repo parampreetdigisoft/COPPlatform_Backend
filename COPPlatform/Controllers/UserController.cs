@@ -102,12 +102,6 @@ namespace COPPlatform.Controllers
             return Ok(await _userService.GetUserInfo(claimUserId.GetValueOrDefault()));
         }
 
-
-        [HttpGet]
-        [Authorize(Policy = "AdminOnly")]
-        [Route("getUsersAssignedToCity/{cityID}")]
-        public async Task<IActionResult> GetUsersAssignedToCity(int cityID) => Ok(await _userService.GetUsersAssignedToCity(cityID));
-
        
         [HttpGet]
         [Route("getInviations")]

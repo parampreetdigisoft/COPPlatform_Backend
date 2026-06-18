@@ -143,56 +143,6 @@ namespace COPPlatform.Services
             }
         }
         
-        public async Task<ResultResponseDto<List<GetAssessmentResponseDto>>> GetUsersAssignedToCity(int cityId)
-        {
-            try
-            {
-                var year = DateTime.UtcNow.Year;
-                var query =
-                from u in _context.Users
-                where !u.IsDeleted
-                join uc in _context.UserAssessmentMappings
-                        .Where(x => !x.IsDeleted && x.CityID == cityId)
-                    on u.UserID equals uc.UserID
-                join c in _context.Cities.Where(x => !x.IsDeleted)
-                    on uc.CityID equals c.CityID
-                join createdBy in _context.Users.Where(x => !x.IsDeleted)
-                    on uc.AssignedByUserId equals createdBy.UserID into createdByUser
-                from createdBy in createdByUser.DefaultIfEmpty()
-
-                    // LEFT JOIN to Assessments
-                join a in _context.Assessments
-                        .Include(q => q.PillarAssessments)
-                            .ThenInclude(q => q.Responses).Where(x=>x.IsActive && x.CreatedAt.Year == year)
-                    on uc.UserAssessmentMappingID equals a.UserAssessmentMappingID into userAssessment
-                from a in userAssessment.DefaultIfEmpty()
-
-                select new GetAssessmentResponseDto
-                {
-                    AssessmentID = a != null ? a.AssessmentID : 0,
-                    UserAssessmentMappingID = uc.UserAssessmentMappingID,
-                    CreatedAt = a != null ? a.CreatedAt : null,
-
-                    Score = a != null
-                        ? a.PillarAssessments.SelectMany(x => x.Responses)
-                            .Where(r => r.Score.HasValue && (int)r.Score.Value <= (int)ScoreValue.Four)
-                            .Sum(r => (int?)r.Score ?? 0)
-                        : 0,
-                    AssessmentPhase = a != null ? a.AssessmentPhase : null
-                };
-
-
-
-                var users = await query.Distinct().ToListAsync();
-
-                return ResultResponseDto<List<GetAssessmentResponseDto>>.Success(users, new[] { "user get successfully" });
-            }
-            catch (Exception ex)
-            {
-                await _appLogger.LogAsync("Error Occure in GetUsersAssignedToCity", ex);
-                return ResultResponseDto<List<GetAssessmentResponseDto>>.Failure(new string[] { "There is an error please try later" });
-            }
-        }
         public async Task<ResultResponseDto<UpdateUserResponseDto>> GetUserInfo(int userId)
         {
             try

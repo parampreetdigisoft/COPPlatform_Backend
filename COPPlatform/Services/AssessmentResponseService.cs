@@ -797,214 +797,6 @@ namespace COPPlatform.Services
             }
             return ResultResponseDto<string>.Failure(new[] { "Failed to Changed assessment status" });
         }
-
-        public async Task<ResultResponseDto<string>> TransferAssessment(TransferAssessmentRequestDto r)
-        {
-            try
-            {
-                var currentDate = DateTime.UtcNow;
-
-                var transferAssessment = await _context.Assessments
-                    .Include(x => x.UserAssessmentMapping)
-                    .Include(x => x.PillarAssessments)
-                        .ThenInclude(x => x.Responses)
-                    .FirstOrDefaultAsync(x => x.AssessmentID == r.AssessmentID);
-
-                if (transferAssessment == null)
-                    return ResultResponseDto<string>.Failure(new[] { "Invalid assessment." });
-
-                var cityAssigned = await _context.UserAssessmentMappings
-                    .FirstOrDefaultAsync(x => x.CityID == transferAssessment.UserAssessmentMapping.Year &&
-                                              x.UserID == r.TransferToUserID);
-
-                if (cityAssigned == null)
-                    return ResultResponseDto<string>.Failure(new[] { "This assessment can’t be imported because the selected user hasn’t been assigned to this city yet." });
-
-                // Load existing assessment for that user/city/year (with pillars/responses)
-                var existingAssessment = await _context.Assessments
-                    .Include(a => a.PillarAssessments)
-                        .ThenInclude(p => p.Responses)
-                        .ThenInclude(r=>r.AssessmentResponseHistories)
-                    .FirstOrDefaultAsync(a => a.UserAssessmentMappingID == cityAssigned.UserAssessmentMappingID &&
-                                              a.UpdatedAt.Year == currentDate.Year);
-
-                if (existingAssessment == null)
-                {
-                    existingAssessment = new Assessment
-                    {
-                        UserAssessmentMappingID = cityAssigned.UserAssessmentMappingID,
-                        CreatedAt = currentDate,
-                        UpdatedAt = currentDate,
-                        IsActive = true,
-                        AssessmentPhase = transferAssessment.AssessmentPhase == AssessmentPhase.Completed ?transferAssessment.AssessmentPhase: AssessmentPhase.InProgress,
-                        PillarAssessments = new List<PillarAssessment>()
-                    };
-
-                    _context.Assessments.Add(existingAssessment);
-                }
-                else
-                {
-                    existingAssessment.UpdatedAt = currentDate;
-                    existingAssessment.AssessmentPhase = transferAssessment.AssessmentPhase == AssessmentPhase.Completed ? transferAssessment.AssessmentPhase : AssessmentPhase.InProgress;
-                }
-
-                // Transfer pillar data
-                foreach (var pillar in transferAssessment.PillarAssessments)
-                {
-                    var existingPillar = existingAssessment.PillarAssessments
-                        .FirstOrDefault(x => x.PillarID == pillar.PillarID);
-
-                    if (existingPillar == null)
-                    {
-                        existingPillar = new PillarAssessment
-                        {
-                            PillarID = pillar.PillarID,
-                            Responses = new List<AssessmentResponse>()
-                        };
-                        existingAssessment.PillarAssessments.Add(existingPillar);
-                    }
-
-                    // Add/Update responses
-                    foreach (var response in pillar.Responses)
-                    {
-                        var existingResponse = existingPillar.Responses
-                            .FirstOrDefault(rp => rp.QuestionID == response.QuestionID);
-
-                        if (existingResponse == null)
-                        {
-                            existingPillar.Responses.Add(new AssessmentResponse
-                            {
-                                QuestionID = response.QuestionID,
-                                QuestionOptionID = response.QuestionOptionID,
-                                Justification = response.Justification,
-                                Score = response.Score
-                            });
-                        }
-                        else
-                        {
-                            existingResponse.QuestionOptionID = response.QuestionOptionID;
-                            existingResponse.Justification = response.Justification;
-                            existingResponse.Score = response.Score;
-                        }
-                    }
-
-                    // Delete responses not present in transferAssessment
-                    var transferQuestionIds = pillar.Responses.Select(x => x.QuestionID).ToHashSet();
-                    var toDeleteResponses = existingPillar.Responses
-                        .Where(x => !transferQuestionIds.Contains(x.QuestionID))
-                        .ToList();
-
-                    foreach (var resp in toDeleteResponses)
-                    {
-                        resp.IsDeleted = true;
-                        resp.UpdatedAt = currentDate;
-                        _context.AssessmentResponses.Update(resp);
-                    }
-                }
-
-                // Delete pillars not present in transferAssessment
-                var transferPillarIds = transferAssessment.PillarAssessments.Select(x => x.PillarID).ToHashSet();
-                var toDeletePillars = existingAssessment.PillarAssessments
-                    .Where(x => !transferPillarIds.Contains(x.PillarID))
-                    .ToList();
-
-                foreach (var pillar in toDeletePillars)
-                {
-                    pillar.UpdatedAt = currentDate;
-                    _context.PillarAssessments.Update(pillar);
-                }
-                _download.InsertAnalyticalLayerResults(transferAssessment.UserAssessmentMapping.Year);
-                await _context.SaveChangesAsync();
-
-                return ResultResponseDto<string>.Success("", new[] { "Assessment transferred successfully." });
-            }
-            catch (Exception ex)
-            {
-                await _appLogger.LogAsync("Error in TransferAssessment", ex);
-                return ResultResponseDto<string>.Failure(new[] { "Failed to transfer assessment, please try again later." });
-            }
-        }
-        public async Task<ResultResponseDto<AiCityPillarDashboardResponseDto>> GetCityPillarHistory(UserCityDashBoardRequstDto request, int userId, UserRole userRole)
-        {
-            try
-            {
-                var year = request.UpdatedAt.Year;
-
-                // 1. Validate city access
-                var hasAccess = await _context.UserAssessmentMappings
-                    .AnyAsync(x =>
-                        !x.IsDeleted &&
-                        (userRole == UserRole.Admin ||
-                         (x.UserID == userId && x.CityID == request.CityID)));
-
-                if (!hasAccess)
-                {
-                    return ResultResponseDto<AiCityPillarDashboardResponseDto>
-                        .Failure(new[] { "Unauthorized or invalid city access" });
-                }
-
-                // 2. Fetch required data in parallel
-                var pillarEvaluationsList = await _commonService
-                    .GetCitiesProgressAsync(userId, (int)userRole, year);
-
-                var pillars = await _context.Pillars
-                    .AsNoTracking()
-                    .Select(P=>new
-                    {
-                        P,
-                        TotalQuestions = P.Questions.Count
-                    })
-                    .OrderBy(x => x.P.DisplayOrder)
-                    .ToListAsync();
-
-                var aiCityProgress = await _context.AICityScores
-                    .Where(x => x.CityID == request.CityID && x.Year == year)
-                    .MaxAsync(x => x.AIProgress);
-
-                var city = await _context.Cities
-                    .AsNoTracking()
-                    .Where(x => x.CityID == request.CityID)
-                    .Select(x => new { x.CityID, x.CityName })
-                    .FirstOrDefaultAsync();
-
-                var pillarEvaluations = pillarEvaluationsList.Where(x => x.UserAssessmentMappingID == request.CityID);
-
-                // 3. Map pillar results
-                var pillarResults = pillars
-                    .GroupJoin(
-                        pillarEvaluations,
-                        p => p.P.PillarID,
-                        e => e.PillarID,
-                        (pillar, evals) => new CityPillarDashboardPillarValueDto
-                        {
-                            PillarID = pillar.P.PillarID,
-                            PillarName = pillar.P.PillarName,
-                            DisplayOrder = pillar.P.DisplayOrder,
-                            ScoreProgress = evals.FirstOrDefault()?.ScoreProgress ?? 0
-                        })
-                    .ToList();
-
-                // 4. Prepare response
-                var response = new AiCityPillarDashboardResponseDto
-                {
-                    //CityID = request.CityID,
-                    //CityName = city?.CityName ?? string.Empty,
-                    //AiValue = aiCityProgress ?? 0,
-                    ScoreProgress = Math.Round(pillarEvaluations.Average(x => x.ScoreProgress), 2),
-                    Pillars = pillarResults
-                };
-
-                return ResultResponseDto<AiCityPillarDashboardResponseDto>
-                    .Success(response, new[] { "Pillars fetched successfully" });
-            }
-            catch (Exception ex)
-            {
-                await _appLogger.LogAsync(nameof(GetCityPillarHistory), ex);
-
-                return ResultResponseDto<AiCityPillarDashboardResponseDto>
-                    .Failure(new[] { "Error in getting pillar details" });
-            }
-        }
         public async Task<ResultResponseDto<List<GetAssignedAssessmentResponseDto>>> GetAssignedAssessments(int userID, UserRole userRole)
         {
             try
@@ -1041,7 +833,7 @@ namespace COPPlatform.Services
             }
             catch (Exception ex)
             {
-                await _appLogger.LogAsync(nameof(GetCityPillarHistory), ex);
+                await _appLogger.LogAsync(nameof(GetAssignedAssessments), ex);
 
                 return ResultResponseDto<List<GetAssignedAssessmentResponseDto>>
                     .Failure(new[] { "Error in getting pillar details" });
@@ -1374,9 +1166,7 @@ namespace COPPlatform.Services
                         TotalQuestions = totalQuestions,
                         TotalCriticalAnsweredQuestions = totalCriticalAnswered,
                         TotalCriticalQuestions = totalCriticalQuestions,
-                        AvgCompletionRate = mappingEvals.Count > 0
-                            ? mappingEvals.Average(x => x.CompletionRate)
-                            : 0,
+                        AvgCompletionRate = Math.Round(totalAnswered * 100.0M / totalQuestions, 2),
                         AvgScoreProgress = mappingEvals.Count > 0
                             ? Math.Round(mappingEvals.Average(x => x.ScoreProgress), 2)
                             : 0,
@@ -1475,7 +1265,7 @@ namespace COPPlatform.Services
             }
             catch (Exception ex)
             {
-                await _appLogger.LogAsync(nameof(GetCityPillarHistory), ex);
+                await _appLogger.LogAsync(nameof(GetDashboardPillarHistory), ex);
 
                 return ResultResponseDto<AiCityPillarDashboardResponseDto>
                     .Failure(new[] { "Error in getting pillar details" });

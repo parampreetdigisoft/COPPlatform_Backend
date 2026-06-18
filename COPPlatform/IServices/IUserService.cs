@@ -13,7 +13,6 @@ namespace COPPlatform.IServices
         Task<PaginationResponse<GetUserByRoleResponse>> GetUserByRoleWithAssignedCity(GetUserByRoleRequestDto requestDto,UserRole userRole);
         Task<ResultResponseDto<List<PublicUserResponse>>> GetAccessUsers(GetAssignUserDto requestDto, UserRole userRole, int userId);
         Task<ResultResponseDto<UpdateUserResponseDto>> UpdateUser(UpdateUserDto requestDto);
-        Task<ResultResponseDto<List<GetAssessmentResponseDto>>> GetUsersAssignedToCity(int cityId);
         Task<ResultResponseDto<UpdateUserResponseDto>> GetUserInfo(int userId);
         Task<PaginationResponse<GetInvitationResponseDto>> GetInvitations(GetInvitationRequestDto request, UserRole userRole, int userId);
         Task<ResultResponseDto<string>> DeleteInvitation(DeleteInvitationDto request, UserRole userRole, int userId);

@@ -15,7 +15,6 @@ namespace COPPlatform.Data
         public DbSet<AssessmentResponse> AssessmentResponses { get; set; } = default!;
         public DbSet<Assessment> Assessments { get; set; } = default!;
         public DbSet<PillarAssessment> PillarAssessments { get; set; } = default!;
-        public DbSet<City> Cities { get; set; } = default!;
         public DbSet<UserAssessmentMapping> UserAssessmentMappings { get; set; } = default!;
         public DbSet<AppLogs> AppLogs { get; set; } = default!;
         public DbSet<PaymentRecord> PaymentRecords { get; set; } = default!;
@@ -24,15 +23,9 @@ namespace COPPlatform.Data
         public DbSet<FiveLevelInterpretation> FiveLevelInterpretations { get; set; } = default!;
         public DbSet<AnalyticalLayerResult> AnalyticalLayerResults { get; set; } = default!;
         public DbSet<CityUserPillarMapping> CityUserPillarMappings { get; set; } = default!;
-        public DbSet<AIDataSourceCitation> AIDataSourceCitations { get; set; } = default!;
-        public DbSet<AICityScore> AICityScores { get; set; } = default!;
-        public DbSet<AIEstimatedQuestionScore> AIEstimatedQuestionScores { get; set; } = default!;
-        public DbSet<AIPillarScore> AIPillarScores { get; set; } = default!;
-        public DbSet<AITrustLevel> AITrustLevels { get; set; } = default!;
         public DbSet<AnalyticalLayerPillarMapping> AnalyticalLayerPillarMappings { get; set; } = default!;
         public DbSet<EvaluationCityProgressResultDto> CityProgressResults { get; set; }
         public DbSet<GetCitiesProgressAdminDto> GetCitiesProgressAdminDto { get; set; }
-        public DbSet<AIUserCityMapping> AIUserCityMappings { get; set; }
         public DbSet<UserPillarMapping> UserPillarMappings { get; set; }
         public DbSet<AssessmentResponseHistory> AssessmentResponseHistories { get; set; }
         public DbSet<UserEvaluationPillarProgressResultDto> UserEvaluationPillarProgressResults { get; set; }
@@ -78,7 +71,6 @@ namespace COPPlatform.Data
             .HasForeignKey(r => r.PillarAssessmentID)
             .OnDelete(DeleteBehavior.Cascade);
 
-            modelBuilder.Entity<City>().HasKey(uc => uc.CityID);
             modelBuilder.Entity<PaymentRecord>(entity =>
             {
                 entity.HasKey(p => p.PaymentRecordID);
@@ -110,13 +102,7 @@ namespace COPPlatform.Data
             });
             modelBuilder.Entity<CityUserPillarMapping>().HasKey(ur => ur.CityUserPillarMappingID);
 
-            modelBuilder.Entity<AIDataSourceCitation>().HasKey(ur => ur.CitationID);
-            modelBuilder.Entity<AICityScore>().HasKey(ur => ur.CityScoreID);
-            modelBuilder.Entity<AIEstimatedQuestionScore>().HasKey(ur => ur.QuestionScoreID);
-            modelBuilder.Entity<AIPillarScore>().HasKey(ur => ur.PillarScoreID);
-            modelBuilder.Entity<AITrustLevel>().HasKey(ur => ur.TrustID);
             modelBuilder.Entity<AnalyticalLayerPillarMapping>().HasKey(ur => ur.AnalyticalLayerPillarMappingID);
-            modelBuilder.Entity<AIUserCityMapping>().HasKey(ur => ur.AIUserCityMappingID);
             modelBuilder.Entity<UserPillarMapping>().HasKey(ur => ur.UserPillarMappingID);
             modelBuilder.Entity<AssessmentResponseHistory>(entity =>
             {

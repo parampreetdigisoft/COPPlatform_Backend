@@ -18,8 +18,6 @@ namespace COPPlatform.IServices
         Task<ResultResponseDto<object>> InviteBulkUser(InviteBulkUserDto inviteUser, UserRole userRole, int userId);
         Task<ResultResponseDto<object>> DeleteUser(int deleteUserId, UserRole userRole, int userId);
         Task<ResultResponseDto<UserResponseDto>> RefreshToken(int userId);
-        Task<ResultResponseDto<string>> SendMailForEditAssessment(SendRequestMailToUpdateCity request);
-        Task<ResultResponseDto<UserResponseDto>> CityUserSignUp(CityUserSignUpDto request);
         Task<ResultResponseDto<object>> ConfirmMail(string passwordToken);
         Task<ResultResponseDto<object>> ContactUs(ContactUsRequestDto passwordToken);
         Task<ResultResponseDto<UserResponseDto>> TwofaVerification(string email, int otp);

@@ -5,7 +5,6 @@
         public int PublicUserCityMappingID { get; set; }
         public int UserID { get; set; }
         public int CityID { get; set; }
-        public City? City { get; set; }
         public User? User { get; set; }
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
         public bool IsActive { get; set; } = true;

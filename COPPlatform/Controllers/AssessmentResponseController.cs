@@ -196,40 +196,7 @@ namespace COPPlatform.Controllers
             return Ok(result);
         }
 
-        [HttpPost]
-        [Route("transferAssessment")]
-        [Authorize]
-        public async Task<IActionResult> TransferAssessment([FromBody] TransferAssessmentRequestDto requestDto)
-        {
-            var result = await _responseService.TransferAssessment(requestDto);
-            return Ok(result);
-        }
-
-        /// <summary>
-        /// This API is used to get the city pillar history  gloabal history for admin
-        /// </summary>
-        /// <param name="cityID"></param>
-        /// <returns></returns>
-        [HttpGet]
-        [Route("getCityPillarHistory")]
-        [Authorize]
-        public async Task<IActionResult> GetCityPillarHistory([FromQuery] UserCityDashBoardRequstDto userCityRequstDto)
-        {
-            var userId = GetUserIdFromClaims();
-            if (userId == null)
-                return Unauthorized("User ID not found in token.");
-
-            var role = GetRoleFromClaims();
-            if (role == null)
-                return Unauthorized("You Don't have access.");
-
-            if (!Enum.TryParse<UserRole>(role, true, out var userRole))
-            {
-                return Unauthorized("You Don't have access.");
-            }
-            var result = await _responseService.GetCityPillarHistory(userCityRequstDto, userId.GetValueOrDefault(), userRole);
-            return Ok(result);
-        }
+       
 
         [HttpGet]
         [Route("getAssignedAssessments")] // for Analyst only
