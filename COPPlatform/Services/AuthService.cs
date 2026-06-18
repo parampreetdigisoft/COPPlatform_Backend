@@ -100,7 +100,7 @@ namespace COPPlatform.Services
                         Title = sub,
                         ApiUrl = _appSettings.ApiUrl,
                         ApplicationUrl = url,
-                        MsgText= "A request was made to update the password for your Peace Enablers Matrix (PEM) account. To proceed, please use the secure link below:",
+                        MsgText= "A request was made to update the password for your Grand Event Readiness System account. To proceed, please use the secure link below:",
                         IsShowBtnText=true,
                         IsLoginBtn=false,
                         BtnText= "Update Password",
