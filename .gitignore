@@ -13,5 +13,8 @@ obj/
 # Ignore Rider/JetBrains
 .idea/
 
+# ASP.NET Core configuration
+appsettings.json
+appsettings.*.json
  
  
